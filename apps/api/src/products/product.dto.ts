@@ -1,0 +1,54 @@
+import { ProductStatus, ProductType } from "@prisma/client";
+import { Type } from "class-transformer";
+import {
+  ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsObject, IsOptional, IsString, IsUrl, Matches, Max, MaxLength, Min, MinLength, ValidateNested,
+} from "class-validator";
+
+export class ProductImageDto {
+  // Either a remote HTTPS image or a file served from /uploads.
+  @IsString() @MaxLength(2000) @Matches(/^(https:\/\/\S+|\/uploads\/[A-Za-z0-9._-]+)$/) url!: string;
+  @IsOptional() @IsString() @MaxLength(200) alt?: string;
+}
+
+export class ProductDto {
+  @IsString() @MinLength(1) @MaxLength(200) name!: string;
+  @IsString() @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/) @MaxLength(200) slug!: string;
+  @IsString() @MinLength(1) @MaxLength(10_000) description!: string;
+  @IsOptional() @IsString() @MaxLength(100) brand?: string;
+  @IsOptional() @IsObject() specifications?: Record<string, string>;
+  @IsString() categoryId!: string;
+
+  @IsEnum(ProductType) productType!: ProductType;
+  @IsOptional() @IsEnum(ProductStatus) status?: ProductStatus;
+  @IsOptional() @IsBoolean() featured?: boolean;
+
+  @IsInt() @Min(0) @Max(100_000_000) pricePaise!: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) mrpPaise?: number;
+  @IsOptional() @IsString() @MaxLength(100) sellerName?: string;
+  @IsOptional() @IsString() @MaxLength(1000) deliveryInfo?: string;
+  @IsOptional() @IsString() @MaxLength(1000) returnPolicy?: string;
+
+  @IsOptional() @IsBoolean() showRating?: boolean;
+  @IsOptional() @IsString() @MaxLength(40) dealLabel?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(30) deliveryDays?: number;
+  @IsOptional() @IsBoolean() freeDelivery?: boolean;
+  @IsOptional() @IsBoolean() showAddToCart?: boolean;
+  @IsOptional() @IsInt() @IsIn([0, 5, 12, 18, 28]) gstRatePercent?: number;
+
+  @IsOptional() @IsString() @MaxLength(64) sku?: string;
+  @IsOptional() @IsInt() @Min(0) stock?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) costPaise?: number;
+
+  @IsOptional() @IsString() @MaxLength(60) platform?: string;
+  @IsOptional() @IsUrl({ protocols: ["https"], require_protocol: true }) affiliateUrl?: string;
+  @IsOptional() @IsString() @MaxLength(500) affiliateDisclosure?: string;
+
+  @IsArray() @ArrayMaxSize(12) @ValidateNested({ each: true }) @Type(() => ProductImageDto)
+  images!: ProductImageDto[];
+
+  @IsOptional() @IsArray() @ArrayMaxSize(6) @IsString({ each: true }) @MaxLength(500, { each: true })
+  videoUrls?: string[];
+
+  @IsOptional() @IsArray() @ArrayMaxSize(12) @IsString({ each: true }) @MaxLength(400, { each: true })
+  highlights?: string[];
+}

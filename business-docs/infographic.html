@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the store works: the whole service at a glance</title>
+<style>
+  :root {
+    --ink: #14213d;
+    --muted: #4a5568;
+    --line: #d9e0ea;
+    --bg: #f4f7fb;
+    --card: #ffffff;
+    --brand: #0b7a5b;
+    --brand-soft: #e3f5ee;
+    --blue: #1d4ed8;
+    --blue-soft: #e5edff;
+    --amber: #92400e;
+    --amber-soft: #fef3c7;
+    --red: #b42318;
+    --red-soft: #fde8e6;
+    --violet: #5b21b6;
+    --violet-soft: #ede9fe;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+  a { color: var(--blue); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+  /* Hero */
+  header.hero { background: linear-gradient(135deg, #0b3d2e, #0b7a5b 60%, #14a57a); color: #fff; padding: 56px 0 40px; }
+  .hero h1 { margin: 0 0 8px; font-size: clamp(28px, 5vw, 46px); line-height: 1.1; letter-spacing: -0.02em; }
+  .hero p.lead { margin: 0 0 28px; max-width: 720px; font-size: clamp(16px, 2.2vw, 20px); color: #e6f7f1; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { background: rgba(255, 255, 255, .13); border: 1px solid rgba(255, 255, 255, .28); border-radius: 14px; padding: 14px 16px; }
+  .stat b { display: block; font-size: 30px; line-height: 1.1; }
+  .stat span { font-size: 14px; color: #e6f7f1; }
+
+  /* Navigation */
+  nav.toc { position: sticky; top: 0; z-index: 5; background: rgba(255, 255, 255, .94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  nav.toc .wrap { display: flex; gap: 6px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; }
+  nav.toc a { white-space: nowrap; text-decoration: none; color: var(--ink); font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; }
+  nav.toc a:hover, nav.toc a:focus-visible { background: var(--brand-soft); border-color: var(--brand); outline: none; }
+
+  /* Sections */
+  section { padding: 44px 0 8px; }
+  section > .wrap > h2 { margin: 0 0 4px; font-size: clamp(22px, 3.4vw, 30px); letter-spacing: -0.01em; }
+  section > .wrap > p.sub { margin: 0 0 22px; color: var(--muted); max-width: 760px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  .grid { display: grid; gap: 16px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  h3 { margin: 0 0 8px; font-size: 18px; }
+  ul.tick { list-style: none; padding: 0; margin: 0; }
+  ul.tick li { position: relative; padding: 3px 0 3px 24px; }
+  ul.tick li::before { content: "\2713"; position: absolute; left: 0; top: 3px; color: var(--brand); font-weight: 700; }
+  ul.cross li::before { content: "\2717"; color: var(--red); }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; letter-spacing: .02em; }
+  .t-green { background: var(--brand-soft); color: #075c44; }
+  .t-blue { background: var(--blue-soft); color: #1e3a8a; }
+  .t-amber { background: var(--amber-soft); color: var(--amber); }
+  .t-red { background: var(--red-soft); color: var(--red); }
+  .t-violet { background: var(--violet-soft); color: var(--violet); }
+  .t-grey { background: #e8edf3; color: #2d3748; }
+
+  /* Step flow */
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; counter-reset: s; }
+  .step { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 14px 14px; counter-increment: s; }
+  .step::before { content: counter(s); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; margin-bottom: 8px; }
+  .step b { display: block; margin-bottom: 4px; }
+  .step small { color: var(--muted); display: block; line-height: 1.4; }
+  @media (min-width: 900px) {
+    .flow.arrows .step:not(:last-child)::after { content: "\2192"; position: absolute; right: -14px; top: 50%; transform: translateY(-50%); color: var(--brand); font-size: 22px; font-weight: 700; z-index: 1; background: var(--bg); border-radius: 50%; width: 22px; text-align: center; line-height: 22px; }
+  }
+
+  /* Status track */
+  .track { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pill { padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 14px; border: 2px solid transparent; }
+  .arrow { color: var(--muted); font-weight: 700; }
+  .p-wait { background: var(--amber-soft); color: var(--amber); border-color: #f2c66d; }
+  .p-ok { background: var(--brand-soft); color: #075c44; border-color: #86d3b9; }
+  .p-ship { background: var(--blue-soft); color: #1e3a8a; border-color: #9db8f5; }
+  .p-end { background: #e8edf3; color: #2d3748; border-color: #b7c2d0; }
+  .p-bad { background: var(--red-soft); color: var(--red); border-color: #f0a9a2; }
+
+  /* Lanes */
+  .lane { border-left: 6px solid var(--brand); }
+  .lane.cod { border-left-color: var(--amber); }
+  .lane ol { margin: 8px 0 0; padding-left: 20px; }
+  .lane li { padding: 2px 0; }
+
+  /* Roles */
+  .role { border-top: 6px solid var(--brand); }
+  .role.guest { border-top-color: #8fa0b5; }
+  .role.cust { border-top-color: var(--blue); }
+  .role.staff { border-top-color: var(--amber); }
+  .role.admin { border-top-color: var(--violet); }
+  .role p.who { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+
+  /* Matrix */
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); }
+  thead th { background: #eef2f8; font-size: 14px; position: sticky; top: 0; }
+  td.c, th.c { text-align: center; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .y { color: #075c44; font-weight: 800; }
+  .n { color: var(--red); font-weight: 800; }
+  .o { color: var(--muted); }
+
+  /* Decision tree */
+  .decide { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .decide .card h3 span { font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-right: 6px; }
+
+  /* Admin map */
+  .area h3 { display: flex; align-items: center; gap: 10px; }
+  .area h3 i { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; font-style: normal; font-weight: 800; color: #fff; background: var(--brand); }
+  .area.a2 h3 i { background: var(--blue); }
+  .area.a3 h3 i { background: var(--amber); }
+  .area.a4 h3 i { background: var(--violet); }
+  .area.a5 h3 i { background: #0f766e; }
+  .area.a6 h3 i { background: #be123c; }
+  .area p.path { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+
+  /* Notifications */
+  .chan { display: inline-block; min-width: 26px; text-align: center; font-weight: 700; }
+
+  .safety .card b { display: block; margin-bottom: 4px; }
+  .safety .card p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  /* Architecture */
+  .arch { display: grid; gap: 10px; }
+  .arch .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .box { padding: 10px 16px; border-radius: 12px; border: 2px solid var(--line); background: #fff; font-weight: 600; text-align: center; }
+  .box small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+  .box.core { border-color: var(--brand); background: var(--brand-soft); }
+  .box.opt { border-style: dashed; border-color: #8a99ad; }
+  .down { text-align: center; color: var(--muted); font-weight: 700; }
+
+  footer { margin-top: 48px; padding: 28px 0 40px; background: #0f2236; color: #d6e0ee; }
+  footer a { color: #9fc3ff; }
+
+  @media print {
+    nav.toc { display: none; }
+    body { background: #fff; font-size: 13px; }
+    section { padding-top: 22px; break-inside: avoid-page; }
+    .card, .step, .scroll { break-inside: avoid; }
+    header.hero { color: #000; background: #fff; border-bottom: 3px solid #0b7a5b; }
+    .hero p.lead, .stat span { color: #333; }
+    .stat { border-color: #bbb; background: #f4f4f4; }
+    footer { background: #fff; color: #000; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>The whole store at a glance</h1>
+    <p class="lead">One platform to sell your own products and partner products, take payments, ship orders, handle cancellations, returns and refunds, and run the business from a simple console. This page shows how it works, who can do what, and how to control it.</p>
+    <div class="stats" aria-label="Numbers at a glance">
+      <div class="stat"><b>2</b><span>ways to sell: own and partner products</span></div>
+      <div class="stat"><b>3</b><span>ways to sign in: email, phone code, Google</span></div>
+      <div class="stat"><b>2</b><span>ways to pay: on delivery, online</span></div>
+      <div class="stat"><b>7</b><span>order statuses, tracked end to end</span></div>
+      <div class="stat"><b>4</b><span>roles: guest, customer, staff, admin</span></div>
+      <div class="stat"><b>3</b><span>message channels: email, SMS, WhatsApp</span></div>
+      <div class="stat"><b>45</b><span>customer pages and admin screens</span></div>
+      <div class="stat"><b>490</b><span>automatic tests guard every change</span></div>
+    </div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <div class="wrap">
+    <a href="#sell">Two ways to sell</a>
+    <a href="#journey">Shopper journey</a>
+    <a href="#orders">Order tracker</a>
+    <a href="#money">Money</a>
+    <a href="#after">Cancel, return, refund</a>
+    <a href="#roles">Who can do what</a>
+    <a href="#admin">Admin controls</a>
+    <a href="#messages">Messages</a>
+    <a href="#safe">Safety net</a>
+    <a href="#host">Hosting</a>
+  </div>
+</nav>
+
+<main>
+
+<section id="sell">
+  <div class="wrap">
+    <h2>Two ways to sell, one catalogue</h2>
+    <p class="sub">Both kinds of product sit side by side, are found by the same search, and are managed from the same admin screens.</p>
+    <div class="grid g2">
+      <div class="card" style="border-top:6px solid var(--brand)">
+        <h3>Your own products <span class="tag t-green">cart and checkout</span></h3>
+        <ul class="tick">
+          <li>Add to cart, pay on delivery or online</li>
+          <li>Stock reserved when the order is placed, so no overselling</li>
+          <li>Invoice with a running number (tax invoice or bill of supply)</li>
+          <li>Cancel before shipping, return after delivery, automatic refunds</li>
+          <li>Reviews with a Verified purchase badge</li>
+        </ul>
+      </div>
+      <div class="card" style="border-top:6px solid var(--blue)">
+        <h3>Partner (affiliate) products <span class="tag t-blue">tracked link</span></h3>
+        <ul class="tick">
+          <li>Shown with a clear disclosure</li>
+          <li>"Buy on partner" button sends the visitor to the partner</li>
+          <li>Every click is counted and ranked by product</li>
+          <li>No stock, no checkout, no invoice to manage</li>
+          <li>Searchable, comparable and wishlist-able like any other product</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="journey">
+  <div class="wrap">
+    <h2>The shopper's journey</h2>
+    <p class="sub">What a customer can do, in the order they usually do it.</p>
+    <div class="flow arrows">
+      <div class="step"><b>Discover</b><small>Home page, categories, filters, search with suggestions, compare up to 4</small></div>
+      <div class="step"><b>Choose</b><small>Gallery, videos, specifications, reviews, questions; wishlist; "notify me" if sold out</small></div>
+      <div class="step"><b>Cart</b><small>Quantities, coupon code, live delivery fee; saved in the browser</small></div>
+      <div class="step"><b>Sign in</b><small>Email, mobile code or Google; verify email or phone to order</small></div>
+      <div class="step"><b>Checkout</b><small>Pick or add an address; choose cash or online; optional WhatsApp updates</small></div>
+      <div class="step"><b>Track</b><small>My orders: status badge, invoice, messages on every change</small></div>
+      <div class="step"><b>After sale</b><small>Cancel, return, refund, review, ask a question</small></div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card"><h3>Always available</h3><ul class="tick"><li>Browse, search, compare, cart</li><li>Delivery fee and coupon preview</li><li>Partner links</li></ul></div>
+      <div class="card"><h3>Needs an account</h3><ul class="tick"><li>Wishlist and "notify me"</li><li>My orders, invoices, cancel</li><li>Addresses, coupons, preferences</li></ul></div>
+      <div class="card"><h3>Needs a verified account</h3><ul class="tick"><li>Place an order</li><li>Request a return</li><li>Write a review, ask a question</li></ul><p style="margin:8px 0 0;color:var(--muted);font-size:14px">Verified means an email address or a mobile number has been confirmed.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="orders">
+  <div class="wrap">
+    <h2>The order tracker</h2>
+    <p class="sub">Every order moves through the same statuses. The customer sees the badge and is told about each change.</p>
+    <div class="card">
+      <div class="track" role="list" aria-label="Online order path">
+        <span class="pill p-wait" role="listitem">Awaiting payment</span><span class="arrow">&rarr;</span>
+        <span class="pill p-ok" role="listitem">Paid</span><span class="arrow">&rarr;</span>
+        <span class="pill p-ship" role="listitem">Shipped</span><span class="arrow">&rarr;</span>
+        <span class="pill p-end" role="listitem">Delivered</span>
+      </div>
+      <p style="margin:6px 0 16px;color:var(--muted)">Online payment path. Unpaid orders are cancelled automatically after 30 minutes and the stock goes back.</p>
+      <div class="track" role="list" aria-label="Cash order path">
+        <span class="pill p-ok" role="listitem">Order placed</span><span class="arrow">&rarr;</span>
+        <span class="pill p-ship" role="listitem">Shipped</span><span class="arrow">&rarr;</span>
+        <span class="pill p-end" role="listitem">Delivered</span>
+      </div>
+      <p style="margin:6px 0 16px;color:var(--muted)">Cash on delivery path. The customer pays the courier.</p>
+      <div class="track">
+        <span class="pill p-bad">Cancelled</span>
+        <span style="color:var(--muted)">before shipping, by the customer or an admin. Stock returns; paid online orders are refunded.</span>
+      </div>
+      <div class="track" style="margin-top:10px">
+        <span class="pill p-bad">Refunded</span>
+        <span style="color:var(--muted)">after delivery, once every item has been returned and refunded.</span>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card"><h3>Who moves it</h3><p style="margin:0">Staff and admins move orders to Paid, Shipped and Delivered. Only admins cancel or refund an order from the console.</p></div>
+      <div class="card"><h3>Delivered unlocks</h3><p style="margin:0">The invoice and the return window (7 days by default, set by the admin; 0 turns returns off).</p></div>
+      <div class="card"><h3>Order details</h3><p style="margin:0">Items, price breakdown, discount, delivery, payment method, cancellation reason, refund amount and WhatsApp choice.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="money">
+  <div class="wrap">
+    <h2>How money moves</h2>
+    <p class="sub">The two payment methods have different refund paths. Both are tracked so nothing is forgotten or paid twice.</p>
+    <div class="grid g2">
+      <div class="card lane">
+        <h3>Online payment <span class="tag t-green">automatic</span></h3>
+        <ol>
+          <li>Customer pays by card, UPI or net banking in the secure Razorpay window.</li>
+          <li>The payment is confirmed and the order becomes Paid.</li>
+          <li>Cancel before shipping: refunded automatically to the same card or account.</li>
+          <li>Return after delivery: when an admin presses Refund, the money goes back automatically (banks take 5 to 7 business days).</li>
+          <li>A payment that arrives after the 30-minute window is refunded automatically.</li>
+        </ol>
+      </div>
+      <div class="card lane cod">
+        <h3>Cash on delivery <span class="tag t-amber">tracked by hand</span></h3>
+        <ol>
+          <li>Customer pays the courier on delivery. Nothing to refund if cancelled before shipping.</li>
+          <li>Return: the customer gives a UPI ID when asking.</li>
+          <li>Admin presses Refund; the request appears under Payouts due with amount and UPI ID.</li>
+          <li>Admin sends the money, then records the UPI reference with Mark as paid (once only).</li>
+          <li>The customer is told, and sees "Paid to ... on ..." on their order.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3>Refund amount, worked example</h3>
+      <p style="margin:0 0 8px">Order: items of &#8377;800 and &#8377;200, coupon &#8377;100, delivery &#8377;50. Customer paid &#8377;950.</p>
+      <div class="grid g2">
+        <div><span class="tag t-blue">Return the &#8377;200 item</span><p style="margin:6px 0 0">Refund = 200 &minus; coupon share (100 &times; 200 / 1,000 = 20) = <b>&#8377;180</b>. Delivery is kept.</p></div>
+        <div><span class="tag t-blue">Return the &#8377;800 item later</span><p style="margin:6px 0 0">Refund = everything still owed = 950 &minus; 180 = <b>&#8377;770</b>, including delivery. Order becomes Refunded.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="after">
+  <div class="wrap">
+    <h2>Cancel, return or refund: which one?</h2>
+    <p class="sub">A customer chooses based on where the order is. The system enforces it.</p>
+    <div class="decide">
+      <div class="card">
+        <h3><span class="tag t-amber">Before shipping</span></h3>
+        <p><b>Cancel order</b> in My orders.</p>
+        <ul class="tick"><li>Pick a reason (and add a note)</li><li>Stock goes back at once</li><li>Paid online: refund starts automatically</li><li>If the refund cannot start, the cancel is undone</li></ul>
+      </div>
+      <div class="card">
+        <h3><span class="tag t-blue">Shipped, not yet delivered</span></h3>
+        <p><b>No cancel button.</b></p>
+        <ul class="tick"><li>The parcel is on its way</li><li>An admin can still cancel in the console</li><li>The customer can return it once delivered</li></ul>
+      </div>
+      <div class="card">
+        <h3><span class="tag t-green">After delivery, inside the window</span></h3>
+        <p><b>Return or refund</b> in My orders.</p>
+        <ul class="tick"><li>Pick items and quantities (part or all)</li><li>Staff approve or decline with a reason</li><li>Admin refunds when the item is back</li><li>Item goes back into stock</li></ul>
+      </div>
+      <div class="card">
+        <h3><span class="tag t-grey">After the window</span></h3>
+        <p><b>Return button is gone.</b></p>
+        <ul class="tick"><li>The deadline is shown on the order</li><li>The window length is an admin setting</li></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roles">
+  <div class="wrap">
+    <h2>Who can do what</h2>
+    <p class="sub">Permissions are enforced by the server. Hiding a menu is not the only protection: even a guessed address is refused.</p>
+    <div class="grid g4">
+      <div class="card role guest"><h3>Guest</h3><p class="who">Anyone browsing, no account</p>
+        <ul class="tick"><li>Browse, search, compare</li><li>Use the cart, preview coupon and delivery fee</li><li>Follow partner links</li><li>Sign up or log in</li></ul></div>
+      <div class="card role cust"><h3>Customer</h3><p class="who">Signed in; verified once email or phone is confirmed</p>
+        <ul class="tick"><li>Everything a guest can</li><li>Wishlist, stock alerts, addresses</li><li>Orders, invoices, cancel before shipping</li><li><b>Verified only:</b> order, return, review, ask</li><li>Add sign-in methods, set password</li><li>Download or delete own data</li></ul></div>
+      <div class="card role staff"><h3>Staff</h3><p class="who">Day-to-day team</p>
+        <ul class="tick"><li>See all orders; mark Paid, Shipped, Delivered</li><li>Approve or decline returns</li><li>Answer or delete questions</li><li>Look up products without costs</li><li>See the Attention list</li></ul></div>
+      <div class="card role admin"><h3>Admin</h3><p class="who">Owner or senior manager</p>
+        <ul class="tick"><li>Everything staff can</li><li>Cancel and refund orders and returns; mark payouts paid</li><li>Products, categories, coupons, banners, home page</li><li>Settings, brand, users and roles</li><li>Analytics, reports, audit log</li></ul></div>
+    </div>
+
+    <h3 style="margin:28px 0 10px">Staff and admin side by side</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Capability</th><th class="c">Staff</th><th class="c">Admin</th></tr></thead>
+        <tbody>
+          <tr><td>See orders; mark Paid, Shipped, Delivered</td><td class="c y">&#10003;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Cancel or refund an order</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Approve or decline a return</td><td class="c y">&#10003;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Refund a return; mark a cash payout as paid</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Answer or delete product questions</td><td class="c y">&#10003;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>See the products list</td><td class="c o">read-only, no costs</td><td class="c y">&#10003;</td></tr>
+          <tr><td>See cost prices</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Create, edit, delete products; bulk edit; import and export</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Categories, banners, home page layout</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Coupons</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Store settings, brand and contact</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Analytics, sales reports, affiliate clicks, abandoned carts</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Users: list, export, change roles, sign out</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Audit log</td><td class="c n">&#10007;</td><td class="c y">&#10003;</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="admin">
+  <div class="wrap">
+    <h2>How the admin controls the store</h2>
+    <p class="sub">Everything below is changed from the admin console, with no developer needed. Changes show on the live site straight away.</p>
+    <div class="grid g3">
+      <div class="card area"><h3><i>1</i>Catalogue</h3><p class="path">Products, Categories</p>
+        <ul class="tick"><li>Own or partner product, draft or published</li><li>Pictures, videos, highlights, specifications</li><li>Price, original price, deal label, tax rate</li><li>Stock, low-stock level, cost price</li><li>Bulk edit, CSV import (dry run) and export</li></ul></div>
+      <div class="card area a2"><h3><i>2</i>Look and feel</h3><p class="path">Home page, Banners, Brand and contact</p>
+        <ul class="tick"><li>14 home page block types, drag to reorder</li><li>Banners with schedule, countdown, video</li><li>Store name, logo, tagline, about text</li><li>Contact details, WhatsApp button, social links</li></ul></div>
+      <div class="card area a3"><h3><i>3</i>Promotions</h3><p class="path">Coupons</p>
+        <ul class="tick"><li>Percentage or flat amount</li><li>Minimum order, maximum discount, dates</li><li>Total and per-customer limits</li><li>First order only; personal codes for one customer</li></ul></div>
+      <div class="card area a4"><h3><i>4</i>Orders and money</h3><p class="path">Orders, Returns, Settings</p>
+        <ul class="tick"><li>Status changes, cancel and refund</li><li>Returns: approve, decline, refund, payouts due</li><li>Delivery fee and free-delivery amount</li><li>GST on or off, invoice prefix, return days</li></ul></div>
+      <div class="card area a5"><h3><i>5</i>Insight</h3><p class="path">Overview, Analytics, Affiliate clicks, Audit log</p>
+        <ul class="tick"><li>Revenue, profit, units, best sellers</li><li>Accounting spreadsheet with tax split</li><li>Weekly or monthly sales report by email</li><li>Who changed what, and when</li></ul></div>
+      <div class="card area a6"><h3><i>6</i>People and care</h3><p class="path">Users, Questions, Abandoned carts, Attention</p>
+        <ul class="tick"><li>Set people as customer, staff or admin</li><li>Answer questions; moderate reviews</li><li>Abandoned carts and waiting stock alerts</li><li>Low-stock and missing-picture warnings</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section id="messages">
+  <div class="wrap">
+    <h2>Who is told what</h2>
+    <p class="sub">Email is the main channel. Text message and WhatsApp switch on when connected. A phone-only customer never goes silent.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Event</th><th class="c">Email</th><th class="c">WhatsApp</th><th class="c">SMS</th></tr></thead>
+        <tbody>
+          <tr><td>Order placed, paid, shipped, delivered, cancelled, refunded</td><td class="c y">&#10003;</td><td class="c y">if ticked</td><td class="c y">if no email and no WhatsApp tick</td></tr>
+          <tr><td>Return requested, approved, declined, refunded</td><td class="c y">&#10003;</td><td class="c o">&ndash;</td><td class="c o">&ndash;</td></tr>
+          <tr><td>Cash refund paid out</td><td class="c y">&#10003;</td><td class="c o">&ndash;</td><td class="c y">phone-only accounts</td></tr>
+          <tr><td>Sign-in, add-phone and delete codes</td><td class="c o">&ndash;</td><td class="c o">&ndash;</td><td class="c y">&#10003;</td></tr>
+          <tr><td>Verify email, add email, reset password</td><td class="c y">&#10003;</td><td class="c o">&ndash;</td><td class="c o">&ndash;</td></tr>
+          <tr><td>Cart reminder, back in stock, question answered</td><td class="c y">&#10003;</td><td class="c o">&ndash;</td><td class="c o">&ndash;</td></tr>
+          <tr><td>Owner: low stock, sales report, server error (optional webhook)</td><td class="c y">&#10003;</td><td class="c o">&ndash;</td><td class="c o">&ndash;</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="safe">
+  <div class="wrap">
+    <h2>The built-in safety net</h2>
+    <div class="grid g4 safety">
+      <div class="card"><b>Server-enforced roles</b><p>Staff cannot move money or see costs, even by guessing addresses.</p></div>
+      <div class="card"><b>Audit log</b><p>Every admin and staff change is recorded, including blocked attempts.</p></div>
+      <div class="card"><b>Login protection</b><p>Five wrong passwords lock sign-in for 15 minutes. Codes are limited and stored hashed.</p></div>
+      <div class="card"><b>No overselling</b><p>Stock is reserved when the order is created; 40 buyers racing for 5 units were tested.</p></div>
+      <div class="card"><b>Secure sessions</b><p>Private cookies, origin checks, and a password change signs out every device.</p></div>
+      <div class="card"><b>Safe uploads and exports</b><p>Files are checked by content; spreadsheets cannot run formulas.</p></div>
+      <div class="card"><b>Your data, your choice</b><p>Customers can download or delete their data; invoices are kept as the law requires.</p></div>
+      <div class="card"><b>Monitoring and backups</b><p>Health checks, JSON logs, error alerts, and backup and restore scripts.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="host">
+  <div class="wrap">
+    <h2>Runs anywhere</h2>
+    <p class="sub">No lock-in. Move any piece by changing a setting, not the code.</p>
+    <div class="card arch">
+      <div class="row"><div class="box core">Customer's browser</div></div>
+      <div class="down">&darr;</div>
+      <div class="row"><div class="box core">Website<small>Next.js, storefront and admin</small></div><div class="box core">API<small>all business rules</small></div></div>
+      <div class="down">&darr;</div>
+      <div class="row">
+        <div class="box core">PostgreSQL<small>all data; any managed or own server</small></div>
+        <div class="box core">File storage<small>server disk or any S3-compatible bucket</small></div>
+        <div class="box core">Email<small>any SMTP provider or Amazon SES</small></div>
+      </div>
+      <div class="row">
+        <div class="box opt">Razorpay<small>online payments</small></div>
+        <div class="box opt">Redis<small>faster pages</small></div>
+        <div class="box opt">Meilisearch<small>better search</small></div>
+        <div class="box opt">Twilio<small>SMS</small></div>
+        <div class="box opt">WhatsApp<small>order updates</small></div>
+        <div class="box opt">Google<small>sign-in</small></div>
+      </div>
+      <p style="margin:6px 0 0;text-align:center;color:var(--muted)">Solid boxes are needed. Dashed boxes are optional and the store works without them.</p>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card"><h3>One server</h3><p style="margin:0">A single Docker command starts everything with automatic https, plus backup and restore scripts.</p></div>
+      <div class="card"><h3>Managed platforms</h3><p style="margin:0">Run the two container images on any platform; use a managed database and a bucket for pictures.</p></div>
+      <div class="card"><h3>Move later</h3><p style="margin:0">Start cheap and move providers without changing product data or customer links.</p></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p style="margin:0 0 6px"><b>Read more</b></p>
+    <p style="margin:0">Details for every point above are in the <a href="README.md">business documentation</a> (customer journey, roles, admin guide, staff guide, business rules, notifications, scenarios, feature list). To install and host the store, see the <a href="../setup-guide/README.md">setup guide</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,541 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  // Runs orders, returns and customer questions; see auth/permissions.ts.
+  STAFF
+  ADMIN
+}
+
+// Who changed what in the admin area. Names are copied in so the record stays readable if the account is later removed.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorName String
+  actorRole Role
+  action    String
+  summary   String
+  entity    String?
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([entity, entityId])
+}
+
+enum ProductType {
+  OWN
+  AFFILIATE
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PLACED
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model User {
+  id               String            @id @default(cuid())
+  // An account is reached by email, by phone number (one-time code) or by Google; any one is enough.
+  email            String?           @unique
+  phone            String?           @unique
+  phoneVerifiedAt  DateTime?
+  googleId         String?           @unique
+  name             String
+  // Phone and Google sign-ups get a random hash nobody knows; they can set a real password with "forgot password".
+  passwordHash     String
+  role             Role              @default(CUSTOMER)
+  emailVerifiedAt  DateTime?
+  termsAcceptedAt  DateTime?
+  // False for accounts made with a phone number or Google, whose password is a random one nobody knows.
+  passwordSet      Boolean           @default(true)
+  // The account was deleted by its owner: personal details are removed, order records stay for tax purposes.
+  deletedAt        DateTime?
+  // Wrong password tries in a row, and when sign-in with a password is allowed again after too many.
+  failedLogins     Int               @default(0)
+  lockedUntil      DateTime?
+  // Opt-out for "you left something in your cart" emails.
+  cartRemindersOff Boolean           @default(false)
+  cartSnapshot     CartSnapshot?
+  // Bumped on password change/reset to sign out every existing session.
+  tokenVersion     Int               @default(0)
+  createdAt        DateTime          @default(now())
+  orders           Order[]
+  wishlist         WishlistItem[]
+  reviews          Review[]
+  views            ProductView[]
+  authTokens       AuthToken[]
+  addresses        Address[]
+  returns          ReturnRequest[]
+  questions        ProductQuestion[]
+  stockAlerts      StockAlert[]
+  coupons          Coupon[]
+}
+
+enum AuthTokenType {
+  PASSWORD_RESET
+  EMAIL_VERIFY
+  // Confirms a new email address for an account that had none; the address is in AuthToken.data.
+  EMAIL_ADD
+}
+
+// Only a SHA-256 hash of the emailed token is stored.
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AuthTokenType
+  tokenHash String        @unique
+  data      String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, type])
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  products  Product[]
+  createdAt DateTime   @default(now())
+}
+
+// All money values are stored in paise (INR minor units).
+model Product {
+  id             String         @id @default(cuid())
+  name           String
+  slug           String         @unique
+  description    String
+  brand          String?
+  specifications Json           @default("{}") @db.Json
+  categoryId     String
+  category       Category       @relation(fields: [categoryId], references: [id])
+  images         ProductImage[]
+  videoUrls      String[]       @default([])
+  highlights     String[]       @default([])
+
+  productType ProductType
+  status      ProductStatus @default(DRAFT)
+  featured    Boolean       @default(false)
+
+  pricePaise   Int
+  mrpPaise     Int?
+  // Blank on our own products means "the brand name", read from the brand settings.
+  sellerName   String  @default("")
+  deliveryInfo String?
+  returnPolicy String?
+
+  // What the product card shows on the storefront. Defaults keep cards as they were.
+  showRating    Boolean @default(true)
+  dealLabel     String?
+  deliveryDays  Int?
+  freeDelivery  Boolean @default(false)
+  showAddToCart Boolean @default(false)
+
+  // Used on invoices once GST is switched on in store settings; prices already include it.
+  gstRatePercent Int @default(18)
+
+  // OWN only
+  sku               String?   @unique
+  stock             Int?
+  // Set when the low-stock email went out for this dip; cleared once stock recovers.
+  lowStockAlertedAt DateTime?
+  costPaise         Int?
+
+  // AFFILIATE only
+  platform            String?
+  affiliateUrl        String?
+  affiliateDisclosure String?
+
+  clicks       AffiliateClick[]
+  orderItems   OrderItem[]
+  views        ProductView[]
+  wishlistedBy WishlistItem[]
+  reviews      Review[]
+  questions    ProductQuestion[]
+  stockAlerts  StockAlert[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([status, categoryId])
+  @@index([status, featured])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  position  Int     @default(0)
+}
+
+model AffiliateClick {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  platform  String?
+  referrer  String?
+  ipHash    String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+}
+
+model Order {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id])
+  status        OrderStatus     @default(PENDING_PAYMENT)
+  // totalPaise is what the customer pays: subtotal - discount + shipping.
+  subtotalPaise Int             @default(0)
+  discountPaise Int             @default(0)
+  shippingPaise Int             @default(0)
+  totalPaise    Int
+  couponId      String?
+  coupon        Coupon?         @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponCode    String?
+  // Whether the store was charging GST when the order was placed; decides tax invoice or bill of supply.
+  gstApplied    Boolean         @default(false)
+  invoiceNumber String?         @unique
+  invoicedAt    DateTime?
+  deliveredAt   DateTime?
+  cancelReason  String?
+  // The customer agreed to order updates on WhatsApp, sent to the phone number on this order.
+  whatsappOptIn Boolean         @default(false)
+  refundId      String?
+  refundedPaise Int             @default(0)
+  shippingName  String
+  shippingAddr  Json
+  paymentRef    String?
+  paymentId     String?
+  paymentMethod String          @default("COD")
+  items         OrderItem[]
+  returns       ReturnRequest[]
+  createdAt     DateTime        @default(now())
+
+  @@index([status, createdAt])
+  @@index([paymentRef])
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  REFUNDED
+}
+
+// A customer's request to send some or all of a delivered order's items back; an order can have several.
+model ReturnRequest {
+  id         String       @id @default(cuid())
+  orderId    String
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason     String
+  details    String?
+  status     ReturnStatus @default(REQUESTED)
+  adminNote  String?
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  items       ReturnItem[]
+  // What was refunded for these items, once it has been.
+  refundPaise Int?
+  // Pay-on-delivery orders are refunded by hand: the customer's UPI ID, and when and how the admin paid it.
+  payoutUpi   String?
+  payoutRef   String?
+  paidOutAt   DateTime?
+
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+// The items (and how many of each) one return request covers.
+model ReturnItem {
+  id          String        @id @default(cuid())
+  requestId   String
+  request     ReturnRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  orderItemId String
+  orderItem   OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  quantity    Int
+
+  @@index([requestId])
+  @@index([orderItemId])
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id])
+  quantity       Int
+  pricePaise     Int
+  costPaise      Int?
+  gstRatePercent Int     @default(0)
+
+  // Units already returned and refunded.
+  returnedQty Int          @default(0)
+  returnItems ReturnItem[]
+
+  @@index([productId])
+}
+
+model ProductView {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  visitorId String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@index([productId, visitorId, createdAt])
+}
+
+model WishlistItem {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, productId])
+  @@index([productId])
+}
+
+// The last cart a signed-in customer built, kept only so a reminder can be emailed if they never check out.
+model CartSnapshot {
+  userId     String    @id
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // [{ productId, quantity }]; names and prices are read from the catalogue when the email is sent.
+  items      Json
+  savedAt    DateTime  @default(now())
+  remindedAt DateTime?
+
+  @@index([remindedAt, savedAt])
+}
+
+// A shopper asking to be emailed once a sold-out product is available again.
+model StockAlert {
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  notifiedAt DateTime?
+
+  @@id([userId, productId])
+  @@index([productId, notifiedAt])
+}
+
+// A shopper's question about a product. It is shown on the product page once an admin has answered it.
+model ProductQuestion {
+  id         String    @id @default(cuid())
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   String
+  answer     String?
+  answeredAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([productId, answeredAt])
+  @@index([answeredAt, createdAt])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating    Int
+  title     String?
+  body      String
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([productId])
+}
+
+enum BannerTone {
+  LIGHT
+  DARK
+}
+
+model Banner {
+  id              String     @id @default(cuid())
+  title           String
+  subtitle        String?
+  imageUrl        String
+  ctaLabel        String?
+  linkUrl         String?
+  textTone        BannerTone @default(LIGHT)
+  position        Int        @default(0)
+  active          Boolean    @default(true)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  showCountdown   Boolean    @default(false)
+  videoUrl        String?
+  sponsorName     String?
+  textPosition    String     @default("middle-left")
+  buttonPosition  String?
+  impressionCount Int        @default(0)
+  clickCount      Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([active, position])
+}
+
+model StoreSettings {
+  id                    String    @id @default("default")
+  shippingFeePaise      Int       @default(4900)
+  // Null means delivery is never free; 0 fee means always free.
+  freeShippingOverPaise Int?      @default(49900)
+  gstEnabled            Boolean   @default(false)
+  gstin                 String?
+  legalName             String?
+  businessAddress       String?
+  businessState         String?
+  shippingGstPercent    Int       @default(18)
+  invoicePrefix         String    @default("DZ")
+  // Days after delivery that a customer can ask to return an order; 0 turns returns off.
+  // Own products at or below this many units count as low stock.
+  lowStockThreshold     Int       @default(5)
+  // Where low-stock emails go; blank turns them off.
+  alertEmail            String?
+  // OFF, WEEKLY (Monday) or MONTHLY (the 1st): emails last period's sales report to reportEmail.
+  reportSchedule        String    @default("OFF")
+  reportEmail           String?
+  reportLastSentAt      DateTime?
+  returnWindowDays      Int       @default(7)
+  nextInvoiceNo         Int       @default(1)
+  updatedAt             DateTime  @updatedAt
+}
+
+enum CouponType {
+  PERCENT
+  FLAT
+}
+
+model Coupon {
+  id               String     @id @default(cuid())
+  code             String     @unique
+  description      String?
+  type             CouponType
+  // Percent (1-100) or rupees in paise for FLAT.
+  value            Int
+  minOrderPaise    Int        @default(0)
+  maxDiscountPaise Int?
+  startsAt         DateTime?
+  endsAt           DateTime?
+  usageLimit       Int?
+  perUserLimit     Int?
+  // A personal code: only this customer can use it.
+  userId           String?
+  user             User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Only for a customer who has not ordered yet.
+  firstOrderOnly   Boolean    @default(false)
+  active           Boolean    @default(true)
+  orders           Order[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String?
+  name      String
+  phone     String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// One block of the home page, in display order. With no rows the built-in default layout is shown.
+model HomeWidget {
+  id        String   @id
+  type      String
+  position  Int
+  active    Boolean  @default(true)
+  config    Json
+  updatedAt DateTime @updatedAt
+
+  @@index([position])
+}
+
+// Brand, about-us, contact and social details shown across the storefront. One row.
+model SiteProfile {
+  id              String   @id @default("default")
+  brandName       String   @default("")
+  // Public address of the website, used for links in emails, canonical URLs and the sitemap.
+  siteUrl         String   @default("")
+  logoUrl         String   @default("")
+  logoOnBadge     Boolean  @default(false)
+  tagline         String   @default("")
+  about           String   @default("")
+  email           String   @default("")
+  phone           String   @default("")
+  address         String   @default("")
+  careHours       String   @default("")
+  careNote        String   @default("")
+  whatsapp        String   @default("")
+  whatsappMessage String   @default("")
+  whatsappButton  Boolean  @default(false)
+  socials         Json     @default("{}")
+  otherLinks      Json     @default("[]")
+  updatedAt       DateTime @updatedAt
+}
+
+// A one-time code sent by SMS. Only a hash of the code is kept.
+model OtpCode {
+  id         String    @id @default(cuid())
+  phone      String
+  purpose    String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+}

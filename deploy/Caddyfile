@@ -1,0 +1,13 @@
+{$WEB_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	# Product videos can be up to 50 MB.
+	request_body {
+		max_size 60MB
+	}
+	reverse_proxy api:4000
+}

@@ -1,0 +1,100 @@
+# One-server production setup: database, cache, API, web app and an https reverse proxy.
+# Run from this folder:  cp .env.example .env  (edit it)  then  docker compose up -d --build
+# Every piece can be swapped for a managed service (see ../setup-guide/README.md): point DATABASE_URL, REDIS_URL, STORAGE_* at
+# the managed ones in .env and remove the matching service below.
+name: shop
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-shop}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shop} -d ${POSTGRES_DB:-shop}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redisdata:/data
+
+  # Optional: better product search. Start it with `docker compose --profile search up -d` and set MEILI_URL=http://search:7700.
+  search:
+    profiles: ["search"]
+    image: getmeili/meilisearch:v1.12
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
+    volumes:
+      - searchdata:/meili_data
+
+  api:
+    build: ../apps/api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-shop}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-shop}?schema=public}
+      REDIS_URL: ${REDIS_URL-redis://cache:6379}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+  web:
+    build:
+      context: ../apps/web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL in .env}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL in .env}
+        NEXT_PUBLIC_BUSINESS_NAME: ${NEXT_PUBLIC_BUSINESS_NAME:-}
+        NEXT_PUBLIC_LEGAL_NAME: ${NEXT_PUBLIC_LEGAL_NAME:-}
+        NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
+        NEXT_PUBLIC_SUPPORT_PHONE: ${NEXT_PUBLIC_SUPPORT_PHONE:-}
+        NEXT_PUBLIC_BUSINESS_ADDRESS: ${NEXT_PUBLIC_BUSINESS_ADDRESS:-}
+        NEXT_PUBLIC_GSTIN: ${NEXT_PUBLIC_GSTIN:-}
+        NEXT_PUBLIC_GRIEVANCE_OFFICER: ${NEXT_PUBLIC_GRIEVANCE_OFFICER:-}
+        NEXT_PUBLIC_GRIEVANCE_EMAIL: ${NEXT_PUBLIC_GRIEVANCE_EMAIL:-}
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  # Gets and renews https certificates by itself. Needs ports 80 and 443 open and both domains pointing at this server.
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?set WEB_DOMAIN in .env}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - web
+      - api
+
+volumes:
+  pgdata:
+  redisdata:
+  searchdata:
+  uploads:
+  caddydata:
+  caddyconfig:
