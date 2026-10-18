@@ -81,7 +81,7 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { phone } });
     if (dto.purpose === "signup" && existing) throw new ConflictException("This number already has an account. Please log in instead.");
     // Same answer whether or not the number has an account, so this cannot be used to look people up.
-    if (dto.purpose === "login" && !existing) return { ok: true, resendInSeconds: OTP_RESEND_MS / 1000 };
+    if (dto.purpose === "login" && !existing) return { ok: true, resendInSeconds: OTP_RESEND_MS / 1000, ...(process.env.OTP_DEBUG_RESPONSE ? { devNote: "No account uses this number, so no code was sent. Use Create an account to sign up with it." } : {}) };
     return this.issueOtp(phone, dto.purpose);
   }
 
@@ -97,7 +97,8 @@ export class AuthService {
 
     const resendInSeconds = OTP_RESEND_MS / 1000;
     const code = newOtp();
-    await this.prisma.otpCode.deleteMany({ where: { phone, consumedAt: null } });
+    // Older unused codes are retired, not deleted, so the hourly count above sees every code that was sent.
+    await this.prisma.otpCode.updateMany({ where: { phone, consumedAt: null }, data: { consumedAt: new Date() } });
     await this.prisma.otpCode.create({ data: { phone, purpose, codeHash: hashOtp(phone, code, jwtSecret()), expiresAt: new Date(now + OTP_TTL_MS) } });
     await this.sms.send(phone, `${await this.site.brandName()}: ${code} is your verification code. It expires in 10 minutes. Never share it with anyone.`);
     // Only for automated tests; refused when the API starts in production.

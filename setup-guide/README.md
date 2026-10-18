@@ -15,6 +15,7 @@ This folder explains, step by step, how to run the store on your own computer, h
 | 7 | [Storage, email, SMS and payments](07-storage-email-sms-payments.md) | You are connecting uploads, email, phone codes or Razorpay |
 | 8 | [Go-live checklist](08-go-live-checklist.md) | The site works and you are about to open it to customers |
 | 9 | [Running it day to day](09-operations.md) | Backups, updates, monitoring, restoring, troubleshooting |
+| 10 | [Changing the database safely](10-database-changes.md) | You add or change a field, set up another laptop from scratch, or ship a release with a database change |
 
 ## What you are deploying
 

@@ -41,6 +41,7 @@ function AddPhone({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"number" | "code">("number");
+  const [devCode, setDevCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -49,10 +50,10 @@ function AddPhone({ onDone }: { onDone: () => void }) {
     setError("");
     if (!looksLikeNumber(phone)) return setError("Enter a valid mobile number, for example 98765 43210");
     setBusy(true);
-    const { ok, data } = await post<object>("/auth/phone/send", { phone }).catch(() => ({ ok: false, data: {} as { message?: string } }));
+    const { ok, data } = await post<{ devCode?: string }>("/auth/phone/send", { phone }).catch(() => ({ ok: false, data: {} as { message?: string } }));
     setBusy(false);
     if (!ok) return setError(messageOf(data, "We could not send the code. Please try again."));
-    setStep("code"); setCode("");
+    setStep("code"); setCode(""); setDevCode((data as { devCode?: string }).devCode ?? "");
   }
 
   async function verify(e: FormEvent) {
@@ -80,6 +81,7 @@ function AddPhone({ onDone }: { onDone: () => void }) {
       <label className="block text-sm font-medium">6-digit code sent to {phone}
         <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className={`${field} mt-1.5 font-mono tracking-widest`} />
       </label>
+      {devCode && <p className="text-xs text-muted">Development: your code is <strong className="font-mono text-ink">{devCode}</strong></p>}
       {error && <Note tone="error">{error}</Note>}
       <div className="flex gap-3">
         <button disabled={busy || code.length !== 6} className={button}>{busy ? "Checking…" : "Add number"}</button>

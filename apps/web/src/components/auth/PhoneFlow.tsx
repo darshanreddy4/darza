@@ -30,6 +30,8 @@ export function PhoneFlow({ purpose, extra, check, afterLogin }: { purpose: "log
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [wait, setWait] = useState(0);
+  const [devCode, setDevCode] = useState("");
+  const [devNote, setDevNote] = useState("");
   const codeInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -48,9 +50,9 @@ export function PhoneFlow({ purpose, extra, check, afterLogin }: { purpose: "log
     if (!looksLikeNumber(phone)) return setError("Enter a valid mobile number, for example 98765 43210");
     setBusy(true);
     try {
-      const { ok, data } = await post<{ resendInSeconds?: number }>("/auth/otp/send", { phone, purpose });
+      const { ok, data } = await post<{ resendInSeconds?: number; devCode?: string; devNote?: string }>("/auth/otp/send", { phone, purpose });
       if (!ok) throw new Error(messageOf(data, "We could not send the code. Please try again."));
-      setStep("code"); setCode(""); setWait(data.resendInSeconds ?? 30);
+      setStep("code"); setCode(""); setWait(data.resendInSeconds ?? 30); setDevCode(data.devCode ?? ""); setDevNote(data.devNote ?? "");
       setNote(purpose === "login" ? "If this number has an account, a code is on its way." : "");
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
@@ -92,7 +94,7 @@ export function PhoneFlow({ purpose, extra, check, afterLogin }: { purpose: "log
             ? <span className="text-muted" aria-live="polite">Resend in {wait}s</span>
             : <button type="button" onClick={() => void send()} disabled={busy} className="font-semibold text-brand-700 hover:underline disabled:opacity-60">Resend code</button>}
         </div>
-        {process.env.NODE_ENV !== "production" && <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">Development: with no SMS provider the code is printed in the API terminal.</p>}
+        {process.env.NODE_ENV !== "production" && <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">Development: with no SMS provider the code is printed in the API terminal.{devCode && <> Your code: <strong className="font-mono text-ink">{devCode}</strong></>}{devNote && <> <strong className="text-ink">{devNote}</strong></>}</p>}
       </form>
     );
   }

@@ -29,4 +29,20 @@ test.describe("running the service", () => {
     expect(JSON.stringify(await locked.json())).toContain("Too many wrong passwords");
     await context.close();
   });
+  test("a number can be sent only five codes an hour, however often resend is pressed", async ({ browser }) => {
+    const context = await browser.newContext({ baseURL: WEB, storageState: { cookies: [], origins: [] } });
+    const phone = `95${String(Date.now()).slice(-8)}`;
+    const send = () => context.request.post(`${API}/auth/otp/send`, { data: { phone, purpose: "signup" }, headers: asBrowser });
+    const gap = () => new Promise((r) => setTimeout(r, 3300));
+
+    expect((await send()).status()).toBe(201);
+    // Pressing again straight away is refused by the resend gap.
+    expect((await send()).status()).toBe(429);
+    for (let i = 0; i < 4; i++) { await gap(); expect((await send()).status(), `code ${i + 2}`).toBe(201); }
+    await gap();
+    const sixth = await send();
+    expect(sixth.status()).toBe(429);
+    expect(JSON.stringify(await sixth.json())).toContain("Too many codes");
+    await context.close();
+  });
 });

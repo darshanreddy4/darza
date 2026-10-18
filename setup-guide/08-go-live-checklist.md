@@ -13,6 +13,7 @@ Tick every line before opening the store to customers. Items marked **(do not sk
 - [ ] Database is **not** reachable from the internet (only from the API)
 - [ ] Uploads are on a bucket, or the disk volume is included in backups
 - [ ] A nightly backup runs, copies leave the server, **and one restore has been tested** **(do not skip)**
+- [ ] The team knows the rule for database changes: new migration files only, never edit an applied one, backup before each release ([10 Changing the database safely](10-database-changes.md))
 - [ ] An uptime monitor watches `/health` on both addresses and alerts you
 - [ ] `ERROR_WEBHOOK_URL` is set (optional but recommended)
 

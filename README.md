@@ -13,7 +13,7 @@ Hybrid storefront: DMG-owned products (cart + checkout) and affiliate products (
 - `docker-compose.yml` — local PostgreSQL, Meilisearch and Redis
 - `.github/workflows/ci.yml` — CI: API tests, web lint and build, Docker image builds, end-to-end tests
 
-Start with the [setup guide](setup-guide/README.md) to run or deploy the store, and the [business documentation](business-docs/README.md) to understand what it does.
+Start with the [setup guide](setup-guide/README.md) to run or deploy the store (database changes and releases: [setup-guide/10-database-changes.md](setup-guide/10-database-changes.md)), and the [business documentation](business-docs/README.md) to understand what it does.
 
 ## Hosting and services
 
@@ -21,17 +21,54 @@ Nothing ties the store to one provider. Pictures and videos live on the server d
 
 ## Run locally
 
-```bash
-docker compose up -d
-cd apps/api && cp .env.example .env && npm i
-npx prisma migrate dev && npm run db:seed
-npm run dev            # http://localhost:4000
+Requires Node 22+ and Docker. The API and the website are two separate programs that each keep running, so they need **two terminals** (and the commands must not be pasted as one block).
 
-cd ../web && cp .env.example .env.local && npm i
-npm run dev            # http://localhost:3000
+### First time only (new laptop or fresh clone)
+
+Run from the project folder:
+
+```bash
+docker compose up -d                        # database, cache and search containers
+
+cd apps/api
+cp .env.example .env                        # FIRST TIME ONLY: this overwrites any existing .env
+npm install
+npx prisma migrate dev                      # builds all database tables
+npm run db:seed                             # sample admin and sample products (development only)
+
+cd ../web
+cp .env.example .env.local                  # FIRST TIME ONLY
+npm install
 ```
 
-Admin login uses `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `apps/api/.env` (change them before any deployment). Requires Node 22+.
+The admin login is `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `apps/api/.env` (change them before any deployment). The seed creates the admin only if it does not exist yet; it never changes an existing admin's password.
+
+### Every day: start
+
+Make sure Docker is running, then:
+
+| Terminal | Commands | Opens |
+|---|---|---|
+| 1 (API) | `cd apps/api && npm run dev` | http://localhost:4000 (health check: `/health`) |
+| 2 (website) | `cd apps/web && npm run dev` | http://localhost:3000, admin at http://localhost:3000/admin |
+
+Leave both terminals open while you work. If the containers are stopped, run `docker compose up -d` first.
+
+### Stop
+
+Press `Ctrl+C` in each terminal. `docker compose down` stops the database containers (your data is kept; add `-v` only if you want to delete all local data).
+
+### Later
+
+| Situation | What to run |
+|---|---|
+| After `git pull` | `cd apps/api && npm install && npx prisma migrate dev`, and `npm install` in `apps/web` if `package.json` changed. Then start as above |
+| You changed `apps/api/prisma/schema.prisma` | `cd apps/api && npx prisma migrate dev --name what_changed` (see [Changing the database safely](setup-guide/10-database-changes.md)) |
+| Port 3000 or 4000 is already in use | `lsof -ti :3000 \| xargs kill` (or `:4000`), then start again |
+| Forgot the admin password | "Forgot password" on the login page |
+| Start over with an empty database | `docker compose down -v`, then repeat the first-time steps |
+
+`npm run dev` is for development only. For a live site use the production setup in [setup-guide](setup-guide/README.md).
 
 ## Search (Meilisearch)
 
@@ -70,7 +107,7 @@ Customers can sign up and log in with an email and password, a mobile number (on
 - Google: create an OAuth "Web" client in Google Cloud, set `GOOGLE_CLIENT_ID` in `apps/api/.env`, and add your site address (and `http://localhost:3000` for testing) under "Authorised JavaScript origins". The button appears once the id is set. A Google account with a verified email joins an existing account with that email.
 - Mobile number: set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM`. Without them the option only appears outside production, and the code is printed in the API log. Codes are 6 digits, last 10 minutes, allow 5 tries, 30 seconds between sends and 5 per hour per number. Numbers are treated as Indian (+91) unless typed with another country code.
 - Mobile and Google accounts count as verified. Accounts made with a number have no email, so they get no email updates, and existing email accounts cannot add a number yet.
-- `OTP_DEBUG_RESPONSE=true` (tests only, never in production) returns the code in the API response, and `OTP_RESEND_SECONDS` shortens the resend gap.
+- `OTP_DEBUG_RESPONSE=true` (development and tests only; the API refuses to start in production with it) returns the code in the API response, and the sign-up and add-phone screens then show it on the page, so you do not have to look for it in the API terminal. It is on in `apps/api/.env.example`. `OTP_RESEND_SECONDS` shortens the resend gap.
 
 ## Admin users
 

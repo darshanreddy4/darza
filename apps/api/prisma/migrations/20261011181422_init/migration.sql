@@ -47,7 +47,7 @@ CREATE TABLE "Product" (
     "featured" BOOLEAN NOT NULL DEFAULT false,
     "pricePaise" INTEGER NOT NULL,
     "mrpPaise" INTEGER,
-    "sellerName" TEXT NOT NULL DEFAULT 'Darza',
+    "sellerName" TEXT NOT NULL DEFAULT 'DMG',
     "deliveryInfo" TEXT,
     "returnPolicy" TEXT,
     "sku" TEXT,

@@ -113,6 +113,7 @@ Docker keeps logs per container: `docker compose logs -f api`, `docker compose l
 ```bash
 # one-server setup, from shop/deploy
 docker compose up -d --build            # start / update everything
+# A release that changes the database: take a backup first and read 10-database-changes.md
 docker compose ps                       # status
 docker compose logs -f api              # live API log
 docker compose restart api              # restart after editing .env
