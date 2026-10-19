@@ -5,8 +5,7 @@ import { useState, type ReactNode } from "react";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { SOCIAL_PLATFORMS, type SiteProfile } from "@/lib/site-profile";
 import { Alert, Card, PageHeader, Skeleton, btn, inputCls } from "@/components/admin/ui";
-import { ImageField } from "@/components/admin/ImageField";
-import { Logo } from "@/components/Logo";
+import { LogoDesigner } from "@/components/admin/LogoDesigner";
 import { useBrand } from "@/components/BrandProvider";
 import { SocialIcon } from "@/components/SocialIcons";
 
@@ -64,23 +63,26 @@ function BrandForm({ initial }: { initial: SiteProfile }) {
       {dirty && <p className="mb-4 rounded-xl bg-gold-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-gold/40">You have unsaved changes.</p>}
 
       <div className="space-y-6">
-        <Card title="Logo and brand" description="Leave the logo empty to keep the built-in name and mark.">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="space-y-4">
-              <Field name="Brand name" hint="Shown across the store, emails, invoices and page titles: header, footer, Sold by labels, policies, checkout. Change it here and everything follows."><>{text("brandName", 40, { placeholder: "DMG" })}</></Field>
-              <Field name="Website address" hint="Your domain, for example https://www.yourbrand.com. Used for links in emails, search engine canonical links and the sitemap. If you move to a new domain, also update WEB_ORIGIN on the server so logins keep working."><>{text("siteUrl", 200, { placeholder: "https://www.yourbrand.com" })}</></Field>
-              <Field name="Short tagline" hint="One or two sentences under the logo in the footer."><>{text("tagline", 200)}</></Field>
-              <ImageField name="Logo" value={form.logoUrl} onChange={(v) => set({ logoUrl: v })} />
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-600" checked={form.logoOnBadge} onChange={(e) => set({ logoOnBadge: e.target.checked })} />
-                <span>Show my logo on a white badge<span className={hint}>The header and footer are dark. Switch this on if your logo is dark or has a transparent background that disappears.</span></span>
-              </label>
-            </div>
-            <div>
-              <p className={label}>Preview</p>
-              <div className="mt-1.5 rounded-2xl bg-ink px-6 py-8"><Logo logoUrl={form.logoUrl} name={form.brandName || currentBrand} onBadge={form.logoOnBadge} /></div>
-              <p className={hint}>This is how it looks in the header and footer.</p>
-            </div>
+        <Card title="Logo and brand" description="Your name and how your logo looks in the header, footer and sign-in screens.">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Field name="Brand name" hint="Shown across the store, emails, invoices and page titles. Change it here and everything follows."><>{text("brandName", 40, { placeholder: "DMG" })}</></Field>
+            <Field name="Website address" hint="Your domain, for example https://www.yourbrand.com. Used for links in emails, canonical links and the sitemap. If you move to a new domain, also update WEB_ORIGIN on the server."><>{text("siteUrl", 200, { placeholder: "https://www.yourbrand.com" })}</></Field>
+            <Field name="Short tagline" hint="One or two sentences under the logo in the footer."><>{text("tagline", 200)}</></Field>
+          </div>
+          <div className="mt-6 border-t border-line pt-6">
+            <LogoDesigner
+              brandName={form.brandName || currentBrand} logoUrl={form.logoUrl} logoOnBadge={form.logoOnBadge} design={form.logoDesign}
+              onChange={(patch) => set(patch)}
+            />
+          </div>
+        </Card>
+
+        <Card title="Legal and grievance details" description="Shown on the Contact & Grievance page and in the standard policies. They take the place of the values in the web .env file.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field name="Registered business name" hint="The company or proprietor that runs the store."><>{text("legalName", 120, { placeholder: "Acme Retail Pvt Ltd" })}</></Field>
+            <Field name="GSTIN" hint="15 characters. Leave empty if you are not GST registered."><>{text("gstin", 15, { placeholder: "29ABCDE1234F1Z5" })}</></Field>
+            <Field name="Grievance officer" hint="The person customers write to with complaints."><>{text("grievanceOfficer", 120, { placeholder: "Full name" })}</></Field>
+            <Field name="Grievance email" hint="Defaults to your support email."><>{text("grievanceEmail", 120, { placeholder: "grievance@yourbrand.com", type: "email" })}</></Field>
           </div>
         </Card>
 

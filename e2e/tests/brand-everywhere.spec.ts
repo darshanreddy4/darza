@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
-import { asBrowser } from "./helpers";
+import { asBrowser, expectOptions } from "./helpers";
 
 test.use({ storageState: AUTH_FILES.admin, viewport: { width: 1280, height: 900 } });
 
@@ -69,7 +69,7 @@ test.describe.serial("the brand name and website address follow the admin settin
   test("the admin area uses it", async ({ page }) => {
     await page.goto("/admin/products");
     await expect(page).toHaveTitle(`${NAME} Admin`);
-    await expect(page.getByRole("option", { name: `Sold by ${NAME}` })).toBeAttached();
+    await expectOptions(page.getByLabel("Filter by type"), { present: [`Sold by ${NAME}`] });
     await expect(page.getByText(`${NAME} administration`)).toBeVisible();
     await expect(page.getByRole("complementary").getByRole("link", { name: NAME.toUpperCase() })).toBeVisible();
   });

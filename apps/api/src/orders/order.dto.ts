@@ -17,7 +17,7 @@ export class ShippingDto {
   @IsOptional() @IsString() @MaxLength(200) line2?: string;
   @IsString() @MinLength(1) @MaxLength(80) city!: string;
   @IsIn(IN_STATES) state!: string;
-  @Matches(/^\d{6}$/, { message: "pincode must be 6 digits" }) pincode!: string;
+  @Matches(/^[1-9]\d{5}$/, { message: "Enter a valid 6-digit PIN code" }) pincode!: string;
 }
 
 export class CreateOrderDto {
@@ -40,6 +40,9 @@ export class QuoteDto {
   items!: OrderItemDto[];
 
   @IsOptional() @IsString() @MaxLength(30) couponCode?: string;
+
+  // The delivery PIN code, when known, so area delivery fees are included.
+  @IsOptional() @Matches(/^[1-9]\d{5}$/) pincode?: string;
 }
 
 export class UpdateOrderStatusDto {

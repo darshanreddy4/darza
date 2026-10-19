@@ -42,11 +42,11 @@ export function AuthShell({ title, subtitle, children, footer, mode = "recover" 
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
-      <aside className="relative hidden overflow-hidden bg-ink p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
+      <aside data-chrome="panel" className="relative hidden overflow-hidden bg-ink p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
         <div className="grid-pattern absolute inset-0" />
         <div className="absolute -right-20 -top-20 h-96 w-96 rounded-full bg-brand-500/30 blur-3xl" />
         <div className="absolute -bottom-24 left-10 h-80 w-80 rounded-full bg-gold/20 blur-3xl" />
-        <Link href="/" className="relative w-fit"><Logo logoUrl={brand.logoUrl} name={name} onBadge={brand.logoOnBadge} /></Link>
+        <Link href="/" className="relative w-fit"><Logo logoUrl={brand.logoUrl} name={name} onBadge={brand.logoOnBadge} design={brand.logoDesign} /></Link>
 
         <div className="relative max-w-lg">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium ring-1 ring-white/15">
@@ -86,7 +86,7 @@ export function AuthShell({ title, subtitle, children, footer, mode = "recover" 
         <div className="relative overflow-hidden bg-ink px-6 py-6 text-white lg:hidden">
           <div className="grid-pattern absolute inset-0" />
           <div className="relative">
-            <Link href="/" className="block w-fit"><Logo logoUrl={brand.logoUrl} name={name} onBadge={brand.logoOnBadge} /></Link>
+            <Link href="/" className="block w-fit"><Logo logoUrl={brand.logoUrl} name={name} onBadge={brand.logoOnBadge} design={brand.logoDesign} /></Link>
             <p className="mt-3 text-sm font-medium text-white/80">{copy.headline(name)} <span className="text-brand-500">{copy.accent}</span></p>
           </div>
         </div>

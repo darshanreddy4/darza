@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test } from "@playwright/test";
 import { ADMIN, API, AUTH_FILES, CUSTOMER, money } from "./data";
 import { adminProduct, asBrowser, findUser } from "./helpers";
@@ -25,7 +26,7 @@ test.describe("admin users and roles", () => {
     await expect(table.getByText(CUSTOMER.email)).toBeVisible();
 
     await page.getByLabel("Search users").fill("");
-    await page.getByLabel("Filter by role").selectOption("ADMIN");
+    await pick(page.getByLabel("Filter by role"), "ADMIN");
     await expect(table.getByText(CUSTOMER.email)).toHaveCount(0);
     await expect(table.getByText(ADMIN.email)).toBeVisible();
   });
@@ -50,7 +51,7 @@ test.describe("admin users and roles", () => {
     await page.goto("/admin/users");
     page.on("dialog", (d) => d.accept());
 
-    await page.getByLabel(`Role for ${CUSTOMER.email}`).selectOption("ADMIN");
+    await pick(page.getByLabel(`Role for ${CUSTOMER.email}`), "ADMIN");
     await expect(page.getByText(`${CUSTOMER.email} is now an admin`)).toBeVisible();
     expect((await findUser(request, CUSTOMER.email)).role).toBe("ADMIN");
 
@@ -59,7 +60,7 @@ test.describe("admin users and roles", () => {
     const open = await customer.request.get(`${API}/admin/users`, { headers: asBrowser });
     expect(open.status()).toBe(200);
 
-    await page.getByLabel(`Role for ${CUSTOMER.email}`).selectOption("CUSTOMER");
+    await pick(page.getByLabel(`Role for ${CUSTOMER.email}`), "CUSTOMER");
     await expect(page.getByText(`${CUSTOMER.email} is now a customer`)).toBeVisible();
     const closed = await customer.request.get(`${API}/admin/users`, { headers: asBrowser });
     expect(closed.status()).toBe(403);

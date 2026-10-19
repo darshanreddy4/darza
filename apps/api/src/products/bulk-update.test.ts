@@ -60,7 +60,7 @@ test("removing the MRP", () => {
 
 test("stock, delivery and cart settings apply to DMG products only", () => {
   const changes = { stock: 25, showAddToCart: true, deliveryDays: 3, freeDelivery: true };
-  assert.deepEqual(planBulkPatch(own, changes).patch, { stock: 25, showAddToCart: true, deliveryDays: 3, freeDelivery: true });
+  assert.deepEqual(planBulkPatch(own, changes).patch, { stock: 25, showAddToCart: true, deliveryDays: 3, freeDelivery: true, chargeDelivery: false, deliveryFeePaise: null });
   const p = planBulkPatch(partner, changes);
   assert.deepEqual(p.patch, {});
   assert.match(p.skipReason ?? "", /Partner/);

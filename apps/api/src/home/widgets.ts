@@ -1,6 +1,6 @@
 // The building blocks of the home page, and the rules for what an admin may save in each.
 
-export const WIDGET_TYPES = ["banners", "trust-bar", "categories", "category-slider", "products", "product-slider", "promo-banner", "image-tiles", "tile-carousel", "text", "faq", "how-it-works", "spacer", "adsense"] as const;
+export const WIDGET_TYPES = ["banners", "trust-bar", "categories", "category-slider", "products", "product-slider", "promo-banner", "image-tiles", "tile-carousel", "icon-grid", "brand-cards", "image-banner", "offer-cards", "text", "faq", "how-it-works", "spacer", "adsense"] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 
 export interface Widget {
@@ -118,6 +118,53 @@ const CLEANERS: Record<WidgetType, (c: Record<string, unknown>, p: Problems) => 
     title: text(c.title, 80), subtitle: text(c.subtitle, 160),
     perView: int(c.perView, 2, 5, 4), shape: pick(c.shape, ["landscape", "square", "portrait"], "landscape"),
     items: tiles(c.items, p, 20),
+  }),
+  // A wall of small picture buttons with a label under each, such as shop by category icons.
+  "icon-grid": (c, p) => ({
+    title: text(c.title, 80), subtitle: text(c.subtitle, 160),
+    columns: int(c.columns, 3, 10, 6), size: pick(c.size, ["xsmall", "small", "medium", "large"], "large"),
+    shape: pick(c.shape, ["rounded", "circle", "square", "wide", "tall"], "rounded"), fit: pick(c.fit, ["fill", "whole"], "fill"),
+    accent: pick(c.accent, ["gold", "brand", "purple", "dark", "none"], "gold"),
+    background: pick(c.background, ["cream", "white", "soft"], "cream"),
+    items: list(c.items, 30)
+      .map((i) => ({ imageUrl: image(i.imageUrl, p, "Icon image"), title: text(i.title, 40), linkUrl: link(i.linkUrl, p, "Icon link") }))
+      .filter((i) => i.imageUrl),
+  }),
+  // Colourful promo cards: a brand logo tab, a headline and a product picture.
+  "brand-cards": (c, p) => ({
+    title: text(c.title, 80), subtitle: text(c.subtitle, 160),
+    columns: int(c.columns, 1, 3, 2),
+    background: pick(c.background, ["sky", "sunset", "mint", "lavender", "gold", "brand", "dark", "white"], "sky"),
+    items: list(c.items, 12)
+      .map((i) => ({ logoUrl: image(i.logoUrl, p, "Logo"), headline: text(i.headline, 60), imageUrl: image(i.imageUrl, p, "Product image"), linkUrl: link(i.linkUrl, p, "Card link") }))
+      .filter((i) => i.logoUrl || i.imageUrl || i.headline),
+  }),
+  // One wide picture that links somewhere, with an optional "AD" style tag.
+  "image-banner": (c, p) => {
+    const out = {
+      title: text(c.title, 80), imageUrl: image(c.imageUrl, p, "Banner image"), mobileImageUrl: image(c.mobileImageUrl, p, "Phone image"),
+      alt: text(c.alt, 120), linkUrl: link(c.linkUrl, p), badge: text(c.badge, 12),
+      ratio: pick(c.ratio, ["ultra", "wide", "standard"], "wide"),
+    };
+    if (!out.imageUrl) p.add("Add a banner image");
+    return out;
+  },
+  // Picture cards in a slider or a grid: an optional label strip, caption, "AD" tag and a coloured panel behind them.
+  "offer-cards": (c, p) => ({
+    title: text(c.title, 80), subtitle: text(c.subtitle, 160),
+    layout: pick(c.layout, ["slider", "grid"], "slider"), perView: int(c.perView, 2, 6, 4),
+    shape: pick(c.shape, ["square", "portrait", "landscape"], "square"), imageFit: pick(c.imageFit, ["cover", "contain"], "cover"),
+    captionStyle: pick(c.captionStyle, ["below", "overlay"], "below"),
+    strip: pick(c.strip, ["gold", "purple", "brand", "dark", "none"], "gold"),
+    cardBackground: pick(c.cardBackground, ["cream", "white", "lavender", "none"], "cream"),
+    theme: pick(c.theme, ["none", "gold", "purple", "brand", "dark", "soft"], "none"),
+    headerImageUrl: image(c.headerImageUrl, p, "Header image"), headerAlt: text(c.headerAlt, 120),
+    // A picture behind the cards, with a tint so text stays readable and a choice of text colour.
+    panelImageUrl: image(c.panelImageUrl, p, "Panel image"), panelOverlay: pick(c.panelOverlay, ["none", "light", "dark"], "none"),
+    panelText: pick(c.panelText, ["auto", "light", "dark"], "auto"),
+    items: list(c.items, 24)
+      .map((i) => ({ imageUrl: image(i.imageUrl, p, "Card image"), label: text(i.label, 40), title: text(i.title, 60), badge: text(i.badge, 12), linkUrl: link(i.linkUrl, p, "Card link") }))
+      .filter((i) => i.imageUrl),
   }),
   text: (c) => ({
     title: text(c.title, 120), body: text(c.body, 2000),

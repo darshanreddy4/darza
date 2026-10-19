@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { formatDeliveryDate, formatPrice, imgSet, type Product } from "@/lib/api";
+import { formatDeliveryDate, imgSet, type Product } from "@/lib/api";
+import { Money } from "@/lib/currency";
+import { multiBuyText, soldText } from "@/lib/labels";
 import { AddToCartButton } from "./AddToCartButton";
-import { Stars } from "./Stars";
+import { RatingBadge, SaleTagBadge } from "./ProductBadges";
 import { CompareButton } from "./CompareButton";
+import { ShareButton } from "./ShareButton";
 import { WishlistButton } from "./WishlistButton";
 
 const ExternalIcon = () => (
@@ -45,6 +48,7 @@ export function ProductCard({ product }: { product: Product }) {
   const image = product.images[0];
   const discount = discountPercent(product);
   const own = product.productType === "OWN";
+  const ratingShown = product.showRating && product.ratingCount > 0 && product.ratingAvg !== null;
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-card transition duration-300 hover:-translate-y-1 hover:shadow-lift">
       <div className="relative aspect-square overflow-hidden bg-canvas">
@@ -54,14 +58,12 @@ export function ProductCard({ product }: { product: Product }) {
         ) : (
           <ImageFallback name={product.name} />
         )}
-        {discount > 0 && (
-          <span className="absolute left-3 top-3 rounded-lg bg-ink px-2 py-1 text-xs font-bold text-white">-{discount}%</span>
-        )}
         {product.featured && (
           <span className="absolute bottom-3 left-3 rounded-lg bg-gold px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-ink">Featured</span>
         )}
         <WishlistButton productId={product.id} className="absolute right-3 top-3 z-10 h-9 w-9 bg-white/90 shadow-card backdrop-blur hover:bg-white" />
         <CompareButton productId={product.id} className="absolute right-3 top-14 z-10 h-9 w-9 bg-white/90 shadow-card backdrop-blur hover:bg-white" />
+        <div className="absolute right-3 top-[100px] z-10"><ShareButton slug={product.slug} title={product.name} className="h-9 w-9 bg-white/90 shadow-card backdrop-blur hover:bg-white" /></div>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div><SellerBadge product={product} /></div>
@@ -69,19 +71,28 @@ export function ProductCard({ product }: { product: Product }) {
           <Link href={`/products/${product.slug}`} className="after:absolute after:inset-0">{product.name}</Link>
         </h3>
         {product.brand && <p className="text-xs text-muted">{product.brand}</p>}
-        {product.showRating && product.ratingCount > 0 && product.ratingAvg !== null && (
-          <p className="flex items-center gap-1.5 text-xs text-muted"><Stars value={product.ratingAvg} /> {product.ratingAvg} ({product.ratingCount})</p>
+        {product.packSize && <p className="text-xs text-muted">{product.packSize}</p>}
+        {(ratingShown || product.soldCount > 0) && (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+            {ratingShown && <><RatingBadge value={product.ratingAvg!} count={product.ratingCount} /> <span>({product.ratingCount.toLocaleString("en-IN")})</span></>}
+            {product.soldCount > 0 && <span className="font-medium text-ink-3">{soldText(product.soldCount)}</span>}
+          </p>
         )}
+        {product.sale && <p><span className="inline-block rounded bg-red-50 px-2 py-1 text-xs font-bold text-red-700">Limited-time deal</span></p>}
         {product.dealLabel && <p><span className="inline-block rounded bg-red-600 px-2 py-1 text-xs font-bold text-white">{product.dealLabel}</span></p>}
         <div className="mt-auto flex items-end justify-between pt-2">
-          <div className="flex items-baseline gap-2">
-            <span className="font-display text-xl font-bold">{formatPrice(product.pricePaise)}</span>
-            {discount > 0 && <span className="text-xs text-muted line-through">{formatPrice(product.mrpPaise!)}</span>}
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-display text-xl font-bold"><Money paise={product.pricePaise} /></span>
+            {discount > 0 && <span className="text-xs text-muted line-through"><Money paise={product.mrpPaise!} /></span>}
+            {discount > 0 && <span className="text-xs font-semibold text-green-800">{discount}% off</span>}
           </div>
           <span className="text-xs font-semibold text-brand-700 opacity-0 transition group-hover:opacity-100">
             {own ? "View →" : "View deal →"}
           </span>
         </div>
+        {own && product.lowStock && <p className="text-xs font-semibold text-red-700">Only few left</p>}
+        {product.saleTag && <p><SaleTagBadge tag={product.saleTag} /></p>}
+        {product.multiBuy && <p className="text-xs font-semibold text-green-800">{multiBuyText(product.multiBuy)}</p>}
         {!own && <p className="text-[11px] text-muted">Purchase completes on {product.platform}</p>}
         {own && product.inStock === false && <p className="text-[11px] font-medium text-red-600">Out of stock</p>}
         {own && product.deliveryBy && (

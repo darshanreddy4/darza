@@ -5,6 +5,7 @@ import { formatPrice } from "@/lib/api";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { useAuth } from "@/lib/auth";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls } from "@/components/admin/ui";
+import { Select } from "@/components/Select";
 
 interface ReturnRow {
   id: string; status: "REQUESTED" | "APPROVED" | "REJECTED" | "REFUNDED"; reason: string; details: string | null; adminNote: string | null; createdAt: string;
@@ -49,11 +50,11 @@ export default function ReturnsPage() {
         title="Returns"
         description="Return requests from delivered orders. Approve or decline, then refund once the item is back."
         actions={
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
+          <Select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
             <option value="">All requests</option>
             {STATUSES.map((s) => <option key={s} value={s}>{LABEL[s]}</option>)}
             <option value="PAYOUT">{LABEL.PAYOUT}</option>
-          </select>
+          </Select>
         }
       />
       {error && <Alert tone="error" onClose={() => setError("")}>{error}</Alert>}

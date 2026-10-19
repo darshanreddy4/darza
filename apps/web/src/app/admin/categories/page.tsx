@@ -4,6 +4,7 @@ import { Fragment, useRef, useState, type FormEvent } from "react";
 import { slugify, useAdminApi, useAdminQuery, type AdminCategory, type AdminProduct } from "@/lib/admin";
 import { buildCategoryTree } from "@/lib/categories";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls, td, th } from "@/components/admin/ui";
+import { Select } from "@/components/Select";
 
 export default function CategoriesAdminPage() {
   const call = useAdminApi();
@@ -82,10 +83,10 @@ export default function CategoriesAdminPage() {
         <Card title={parentId ? "New subcategory" : "New category"} description="Choose a parent to create a subcategory." className="h-fit">
           <form onSubmit={add} className="space-y-4">
             <label className="block text-sm font-medium">Parent category
-              <select value={parentId} onChange={(e) => setParentId(e.target.value)} className={`${inputCls} mt-1.5`}>
+              <Select value={parentId} onChange={(e) => setParentId(e.target.value)} className={`${inputCls} mt-1.5`}>
                 <option value="">None (main category)</option>
                 {tree.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="block text-sm font-medium">Name
               <input ref={nameRef} required value={name} maxLength={80} placeholder={parentId ? "e.g. Washing machines" : "e.g. Electronics"} className={`${inputCls} mt-1.5`} onChange={(e) => { setName(e.target.value); if (!touched) setSlug(slugify(e.target.value)); }} />
@@ -116,10 +117,10 @@ function CategoryRow({ c, isChild, hasChildren, count, mains, editing, onEdit, o
         {editing ? (
           <div className="space-y-2">
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} aria-label="Category name" />
-            <select value={parent} onChange={(e) => setParent(e.target.value)} disabled={hasChildren} title={hasChildren ? "A category with subcategories must stay a main category" : undefined} className={inputCls} aria-label="Parent category">
+            <Select value={parent} onChange={(e) => setParent(e.target.value)} disabled={hasChildren} title={hasChildren ? "A category with subcategories must stay a main category" : undefined} className={inputCls} aria-label="Parent category">
               <option value="">None (main category)</option>
               {mains.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </Select>
           </div>
         ) : isChild ? (
           <span className="flex items-center gap-2 pl-6"><span aria-hidden className="text-muted">↳</span>{c.name}</span>

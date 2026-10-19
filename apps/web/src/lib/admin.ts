@@ -10,7 +10,9 @@ export interface AdminProduct {
   pricePaise: number; mrpPaise: number | null; sellerName: string; deliveryInfo: string | null; returnPolicy: string | null;
   sku: string | null; stock: number | null; costPaise: number | null; platform: string | null; affiliateUrl: string | null; affiliateDisclosure: string | null;
   images: { url: string; alt: string | null }[]; videoUrls: string[]; highlights: string[]; createdAt: string; updatedAt: string;
-  showRating: boolean; dealLabel: string | null; deliveryDays: number | null; freeDelivery: boolean; showAddToCart: boolean; gstRatePercent: number;
+  showRating: boolean; dealLabel: string | null; deliveryDays: number | null; freeDelivery: boolean; chargeDelivery: boolean; deliveryFeePaise: number | null; showAddToCart: boolean; gstRatePercent: number;
+  packSize: string | null; saleTag: "TOP_DISCOUNT" | "LOWEST_PRICE" | null; showSold: boolean; multiBuyQty: number | null; multiBuyPercent: number | null;
+  returnDays: number | null; salePricePaise: number | null; saleEndsAt: string | null; variantGroup: string | null; colorName: string | null; warranty: string | null; manufacturerInfo: string | null;
 }
 export interface AdminCategory { id: string; name: string; slug: string; parentId: string | null }
 export interface ClickRow { product?: { name: string; slug: string }; platform: string | null; clicks: number }
@@ -72,9 +74,20 @@ export function productToDto(p: AdminProduct, over: Partial<AdminProduct> = {}) 
     pricePaise: m.pricePaise, mrpPaise: v(m.mrpPaise), sellerName: m.sellerName, deliveryInfo: v(m.deliveryInfo),
     returnPolicy: v(m.returnPolicy), sku: v(m.sku), stock: v(m.stock), costPaise: v(m.costPaise), platform: v(m.platform),
     affiliateUrl: v(m.affiliateUrl), affiliateDisclosure: v(m.affiliateDisclosure),
-    showRating: m.showRating, dealLabel: v(m.dealLabel), deliveryDays: v(m.deliveryDays), freeDelivery: m.freeDelivery, showAddToCart: m.showAddToCart, gstRatePercent: m.gstRatePercent,
+    showRating: m.showRating, dealLabel: v(m.dealLabel), deliveryDays: v(m.deliveryDays), freeDelivery: m.freeDelivery, chargeDelivery: m.chargeDelivery, deliveryFeePaise: v(m.deliveryFeePaise), showAddToCart: m.showAddToCart, gstRatePercent: m.gstRatePercent,
+    packSize: v(m.packSize), saleTag: v(m.saleTag), showSold: m.showSold, multiBuyQty: v(m.multiBuyQty), multiBuyPercent: v(m.multiBuyPercent),
+    returnDays: v(m.returnDays), salePricePaise: v(m.salePricePaise), saleEndsAt: v(m.saleEndsAt), variantGroup: v(m.variantGroup), colorName: v(m.colorName), warranty: v(m.warranty), manufacturerInfo: v(m.manufacturerInfo),
     images: m.images.map((i) => ({ url: i.url, alt: v(i.alt) })), videoUrls: m.videoUrls, highlights: m.highlights,
   };
 }
+
+// <input type="datetime-local"> works in local time without a timezone suffix.
+export const toLocalInput = (iso: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+export const toIso = (local: string) => (local ? new Date(local).toISOString() : null);
 
 export const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);

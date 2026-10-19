@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls } from "@/components/admin/ui";
+import { Select } from "@/components/Select";
 
 interface Row {
   id: string; question: string; answer: string | null; createdAt: string;
@@ -45,11 +46,11 @@ export default function QuestionsAdminPage() {
         title="Questions"
         description="Shoppers' questions about products. An answer is shown on the product page and emailed to the person who asked."
         actions={
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
+          <Select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
             <option value="open">Waiting for an answer</option>
             <option value="answered">Answered</option>
             <option value="">All questions</option>
-          </select>
+          </Select>
         }
       />
       {error && <Alert tone="error" onClose={() => setError("")}>{error}</Alert>}

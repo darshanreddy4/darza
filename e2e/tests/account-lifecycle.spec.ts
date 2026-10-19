@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { API, AUTH_FILES, PASSWORD, WEB } from "./data";
 import { adminProduct, asBrowser, knownLinkToken, newCustomer } from "./helpers";
@@ -47,7 +48,7 @@ test.describe.serial("customers cancelling their own order", () => {
     await page.goto("/orders");
     const card = page.getByRole("listitem").filter({ hasText: `#${short(openOrder)}` }).last();
     await card.getByRole("button", { name: "Cancel order" }).click();
-    await card.getByLabel("Why are you cancelling?").selectOption("Ordered by mistake");
+    await pick(card.getByLabel("Why are you cancelling?"), "Ordered by mistake");
     await card.getByLabel(/Anything to add/).fill("wrong colour");
     await card.getByRole("button", { name: "Yes, cancel order" }).click();
     await expect(card.getByText("Cancelled", { exact: true })).toBeVisible();
@@ -292,7 +293,7 @@ test.describe.serial("pay-on-delivery refunds are tracked until they are paid", 
     await page.goto("/orders");
     const card = page.getByRole("listitem").filter({ hasText: `#${short(orderId)}` }).last();
     await card.getByRole("button", { name: /Return or refund/ }).click();
-    await card.getByLabel("Why are you returning these?").selectOption("Changed my mind");
+    await pick(card.getByLabel("Why are you returning these?"), "Changed my mind");
     await card.getByLabel("UPI ID for your refund").fill(upi);
     await card.getByRole("button", { name: "Send return request" }).click();
     await expect(card.getByText("Return requested")).toBeVisible();
@@ -303,12 +304,12 @@ test.describe.serial("pay-on-delivery refunds are tracked until they are paid", 
     await page.goto("/admin/returns");
     const row = () => page.getByRole("article", { name: `Return for order ${short(orderId)}` });
     await row().getByRole("button", { name: "Approve return" }).click();
-    await page.getByLabel("Filter by status").selectOption("APPROVED");
+    await pick(page.getByLabel("Filter by status"), "APPROVED");
     page.once("dialog", (d) => { expect(d.message()).toContain("Payouts due"); void d.accept(); });
     await row().getByRole("button", { name: "Item received, refund" }).click();
     await expect(page.getByText("Refund recorded")).toBeVisible();
 
-    await page.getByLabel("Filter by status").selectOption("PAYOUT");
+    await pick(page.getByLabel("Filter by status"), "PAYOUT");
     await expect(row()).toContainText("Payout due");
     await expect(row()).toContainText(upi);
     await expect(row().getByRole("button", { name: "Mark as paid" })).toBeDisabled();
@@ -324,7 +325,7 @@ test.describe.serial("pay-on-delivery refunds are tracked until they are paid", 
     await expect(row()).toHaveCount(0);
 
     expect((await request.patch(`${API}/admin/returns/${returnId}`, { data: { action: "paid", reference: "again" }, headers: asBrowser })).status()).toBe(409);
-    await page.getByLabel("Filter by status").selectOption("REFUNDED");
+    await pick(page.getByLabel("Filter by status"), "REFUNDED");
     await expect(row()).toContainText("Paid to payout.test@okbank");
     await expect(row()).toContainText("UPI-REF-123456");
   });

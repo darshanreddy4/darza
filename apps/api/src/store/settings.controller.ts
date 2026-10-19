@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard, Roles } from "../auth/auth.guard";
 import { UpdateSettingsDto } from "./settings.dto";
 import { SettingsService } from "./settings.service";
@@ -11,6 +11,11 @@ export class SettingsController {
   @Get("store/config")
   config() {
     return this.settings.publicConfig();
+  }
+
+  @Get("store/delivery")
+  delivery(@Query("pincode") pincode = "") {
+    return this.settings.deliveryTo(pincode.slice(0, 6));
   }
 
   @Get("admin/settings")

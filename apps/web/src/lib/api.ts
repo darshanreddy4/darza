@@ -1,6 +1,7 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export interface ProductImage { id: string; url: string; alt: string | null }
+export interface ProductVariant { slug: string; colorName: string | null; packSize: string | null; image: string | null; inStock: boolean | null }
 export interface Product {
   id: string;
   name: string;
@@ -29,7 +30,25 @@ export interface Product {
   // Calendar date (YYYY-MM-DD) the product is expected to arrive; null when not shown.
   deliveryBy: string | null;
   freeDelivery: boolean;
+  // Heavy or bulky: always pays delivery (the store's fee when this is null).
+  chargeDelivery: boolean;
+  deliveryFeePaise: number | null;
   showAddToCart: boolean;
+  // e.g. "1750 ml"; "Only few left" and the units-bought count come from real stock and orders.
+  packSize: string | null;
+  saleTag: "TOP_DISCOUNT" | "LOWEST_PRICE" | null;
+  lowStock: boolean;
+  soldCount: number;
+  multiBuy: { qty: number; percent: number } | null;
+  // A running timed sale: pricePaise is already the sale price; the normal price comes back after endsAt.
+  sale: { endsAt: string } | null;
+  // Days after delivery it can be returned; 0 means it cannot be returned.
+  returnDays: number;
+  colorName: string | null;
+  warranty: string | null;
+  manufacturerInfo: string | null;
+  // Other products in the same variant group (only on the product page); empty when there are none.
+  variants?: ProductVariant[];
   category?: { name: string; slug: string; parent?: { name: string; slug: string } | null };
 }
 export interface Category { id: string; name: string; slug: string; parentId: string | null; productCount: number }

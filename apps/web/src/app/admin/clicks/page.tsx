@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAdminQuery, type ClickRow } from "@/lib/admin";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, StatCard, inputCls, td, th } from "@/components/admin/ui";
+import { Select } from "@/components/Select";
 
 export default function ClicksPage() {
   const [days, setDays] = useState("30");
@@ -18,9 +19,9 @@ export default function ClicksPage() {
         title="Affiliate clicks"
         description="Outbound clicks recorded when visitors use “Buy on …” buttons."
         actions={
-          <select value={days} onChange={(e) => setDays(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Date range">
+          <Select value={days} onChange={(e) => setDays(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Date range">
             <option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 12 months</option>
-          </select>
+          </Select>
         }
       />
       {error && <Alert tone="error">{error}</Alert>}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deliveryByDate, publicCardFields } from "./card-options";
+import { deliveryByDate, publicCardFields, publicExtraFields } from "./card-options";
 
 test("delivery date counts calendar days from today in India", () => {
   // 10 Oct 2026 20:00 UTC is already 11 Oct 01:30 in India.
@@ -26,4 +26,28 @@ test("a zero-day delivery still counts as set", () => {
 
 test("partner products never show cart or delivery", () => {
   assert.deepEqual(publicCardFields({ productType: "AFFILIATE", showAddToCart: true, deliveryDays: 2 }), { showAddToCart: false, deliveryBy: null });
+});
+
+const base = { productType: "OWN" as const, stock: 4, saleTag: null, showSold: true, multiBuyQty: null, multiBuyPercent: null };
+
+test("only a few left shows when stock is above zero and at or under the store's low-stock level", () => {
+  assert.equal(publicExtraFields({ ...base, stock: 5 }, 5, 0).lowStock, true);
+  assert.equal(publicExtraFields({ ...base, stock: 6 }, 5, 0).lowStock, false);
+  assert.equal(publicExtraFields({ ...base, stock: 0 }, 5, 0).lowStock, false);
+  assert.equal(publicExtraFields({ ...base, productType: "AFFILIATE", stock: null }, 5, 0).lowStock, false);
+});
+
+test("units bought come from orders, can be hidden, and are never negative", () => {
+  assert.equal(publicExtraFields(base, 5, 1240).soldCount, 1240);
+  assert.equal(publicExtraFields({ ...base, showSold: false }, 5, 1240).soldCount, 0);
+  assert.equal(publicExtraFields(base, 5, -3).soldCount, 0);
+  assert.equal(publicExtraFields({ ...base, productType: "AFFILIATE", stock: null }, 5, 40).soldCount, 0);
+});
+
+test("only the known sale tags and a complete multi-buy offer reach the storefront", () => {
+  assert.equal(publicExtraFields({ ...base, saleTag: "TOP_DISCOUNT" }, 5, 0).saleTag, "TOP_DISCOUNT");
+  assert.equal(publicExtraFields({ ...base, saleTag: "LOWEST_PRICE" }, 5, 0).saleTag, "LOWEST_PRICE");
+  assert.equal(publicExtraFields({ ...base, saleTag: "BEST" }, 5, 0).saleTag, null);
+  assert.deepEqual(publicExtraFields({ ...base, multiBuyQty: 2, multiBuyPercent: 3 }, 5, 0).multiBuy, { qty: 2, percent: 3 });
+  assert.equal(publicExtraFields({ ...base, multiBuyQty: 2 }, 5, 0).multiBuy, null);
 });

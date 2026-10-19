@@ -22,6 +22,8 @@ const NAV = [
   { href: "/admin/coupons", label: "Coupons", icon: "M20 12a2 2 0 0 0 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 0 0-4V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 0-2 2zM9 9l6 6M9.5 9.5h.01M14.5 14.5h.01" },
   { href: "/admin/banners", label: "Banners", icon: "M3 5h18v10H3zM8 19h8M12 15v4" },
   { href: "/admin/clicks", label: "Affiliate clicks", icon: "M9 3l-6 6 6 6M15 21l6-6-6-6M14 4l-4 16" },
+  { href: "/admin/appearance", label: "Appearance & currency", icon: "M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.300-.3-.3-.5-.8-.5-1.300 0-1.100.9-2 2-2h2.300a3.900 3.900 0 0 0 3.700-4C21 6.100 17 3 12 3zM7.500 12a1 1 0 1 0 0-.01M10 8a1 1 0 1 0 0-.01M14.500 8a1 1 0 1 0 0-.01" },
+  { href: "/admin/pages", label: "Pages & policies", icon: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6" },
   { href: "/admin/brand", label: "Brand & contact", icon: "M12 2l3 6 6 .9-4.500 4.300 1.100 6.300L12 16.500 6.400 19.500l1.100-6.300L3 8.900 9 8z" },
   { href: "/admin/audit-log", label: "Audit log", icon: "M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9" },
   { href: "/admin/settings", label: "Settings", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" },
@@ -61,7 +63,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen lg:grid lg:grid-cols-[256px_1fr]">
       <aside className="bg-ink text-white/70 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
         <div className="flex items-center justify-between px-5 py-5 lg:block">
-          <Link href="/admin"><Logo name={brand.name} logoUrl={brand.logoUrl || undefined} onBadge={brand.logoOnBadge} /></Link>
+          <Link href="/admin"><Logo name={brand.name} logoUrl={brand.logoUrl || undefined} onBadge={brand.logoOnBadge} design={brand.logoDesign} /></Link>
           <p className="hidden pt-2 text-[11px] font-semibold uppercase tracking-widest text-white/60 lg:block">{staff ? "Staff console" : "Admin console"}</p>
         </div>
         <nav className="no-scrollbar flex gap-1 overflow-x-auto px-3 pb-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden lg:pb-0" aria-label="Admin">

@@ -29,17 +29,18 @@ export class AccountService {
         questions: { select: { question: true, answer: true, createdAt: true, product: { select: { name: true } } } },
         wishlist: { select: { createdAt: true, product: { select: { name: true } } } },
         stockAlerts: { select: { createdAt: true, product: { select: { name: true } } } },
-        coupons: { select: { code: true } },
+        couponAccess: { select: { coupon: { select: { code: true } } } },
         cartSnapshot: { select: { items: true, savedAt: true } },
       },
     });
     if (!user) throw new NotFoundException();
-    const { googleId, passwordSet, ...profile } = user;
+    const { googleId, passwordSet, couponAccess, ...profile } = user;
     return {
       exportedAt: new Date().toISOString(),
       note: "A copy of the personal data this store holds about your account. Amounts are in paise (100 paise = 1 rupee).",
       signInMethods: { email: !!profile.email, phone: !!profile.phone, google: !!googleId, password: passwordSet },
       ...profile,
+      coupons: couponAccess.map((c) => ({ code: c.coupon.code })),
     };
   }
 
@@ -72,7 +73,9 @@ export class AccountService {
       await tx.productQuestion.deleteMany({ where: { userId } });
       await tx.cartSnapshot.deleteMany({ where: { userId } });
       await tx.authToken.deleteMany({ where: { userId } });
-      await tx.coupon.updateMany({ where: { userId }, data: { active: false } });
+      // A code made only for this customer is switched off; one shared with others keeps working for them.
+      const access = await tx.couponCustomer.findMany({ where: { userId }, select: { couponId: true, coupon: { select: { _count: { select: { customers: true } } } } } });
+      await tx.coupon.updateMany({ where: { id: { in: access.filter((a) => a.coupon._count.customers === 1).map((a) => a.couponId) } }, data: { active: false } });
       await tx.productView.updateMany({ where: { userId }, data: { userId: null } });
       await tx.returnRequest.updateMany({ where: { userId }, data: { payoutUpi: null } });
       const placeholder = await bcrypt.hash(randomBytes(32).toString("hex"), 10);

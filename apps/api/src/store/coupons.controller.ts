@@ -18,6 +18,7 @@ export class CouponsController {
   constructor(private coupons: CouponsService) {}
 
   @Get() list() { return this.coupons.list(); }
+  @Get(":id/usage") usage(@Param("id") id: string) { return this.coupons.usage(id); }
   @Post() create(@Body() dto: CouponDto) { return this.coupons.create(dto); }
   @Put(":id") update(@Param("id") id: string, @Body() dto: CouponDto) { return this.coupons.update(id, dto); }
   @Delete(":id") remove(@Param("id") id: string) { return this.coupons.remove(id); }

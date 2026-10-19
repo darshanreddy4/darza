@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { API_URL, formatPrice } from "@/lib/api";
+import { Money } from "@/lib/currency";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { useBrand } from "@/components/BrandProvider";
@@ -12,8 +13,12 @@ import { IN_STATES } from "@/lib/states";
 import type { SavedAddress } from "@/lib/address";
 import { payForOrder, type PaymentParams } from "@/lib/razorpay";
 import { CouponBox } from "@/components/CouponBox";
+import { OfferList } from "@/components/OfferList";
+import { PincodeField } from "@/components/PincodeField";
+import { RewardsBar } from "@/components/RewardsBar";
 import { SummaryTotals } from "@/components/SummaryTotals";
 import { VerifyRequired } from "@/components/VerifyRequired";
+import { Select } from "@/components/Select";
 
 const field = "w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15";
 
@@ -23,7 +28,6 @@ export default function CheckoutPage() {
   const { lines, totalPaise, count, clear } = useCart();
   const router = useRouter();
   const [coupon, setCoupon] = useCouponCode();
-  const { quote } = useQuote(lines, coupon);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [onlineAvailable, setOnlineAvailable] = useState(false);
@@ -33,6 +37,8 @@ export default function CheckoutPage() {
   const [saved, setSaved] = useState<SavedAddress[]>([]);
   // The id of a saved address, or "new" to type one in.
   const [choice, setChoice] = useState("new");
+  const [typedPin, setTypedPin] = useState("");
+  const { quote } = useQuote(lines, coupon, choice === "new" ? typedPin : saved.find((a) => a.id === choice)?.pincode);
 
   useEffect(() => {
     let stale = false;
@@ -112,6 +118,7 @@ export default function CheckoutPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Checkout</h1>
+      <RewardsBar quote={quote} />
       <VerifyRequired action="place an order" />
       <form onSubmit={submit} className="grid gap-8 lg:grid-cols-[1fr_360px]">
         <section className="space-y-4 rounded-3xl border border-line bg-white p-7 shadow-card">
@@ -140,11 +147,11 @@ export default function CheckoutPage() {
                 <input name="line1" required minLength={3} placeholder="Address line 1" autoComplete="address-line1" className={`${field} sm:col-span-2`} />
                 <input name="line2" placeholder="Address line 2 (optional)" autoComplete="address-line2" className={`${field} sm:col-span-2`} />
                 <input name="city" required placeholder="City" autoComplete="address-level2" className={field} />
-                <select name="state" required defaultValue="" autoComplete="address-level1" aria-label="State" className={field}>
+                <Select name="state" required defaultValue="" autoComplete="address-level1" aria-label="State" className={field}>
                   <option value="" disabled>Select state</option>
                   {IN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <input name="pincode" required pattern="[0-9]{6}" inputMode="numeric" placeholder="Pincode" autoComplete="postal-code" className={field} />
+                </Select>
+                <PincodeField className={field} onPincode={setTypedPin} />
               </div>
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="saveAddress" defaultChecked className="h-4 w-4 accent-emerald-600" /> Save this address for next time</label>
             </>
@@ -167,9 +174,10 @@ export default function CheckoutPage() {
         <aside className="h-fit space-y-4 rounded-3xl border border-line bg-white p-7 shadow-card lg:sticky lg:top-40">
           <h2 className="text-lg font-bold">Order summary</h2>
           <ul className="space-y-2 text-sm">
-            {lines.map((l) => <li key={l.productId} className="flex justify-between gap-3"><span className="truncate">{l.name} × {l.quantity}</span><span>{formatPrice(l.pricePaise * l.quantity)}</span></li>)}
+            {lines.map((l) => { const unit = quote?.lines.find((q) => q.productId === l.productId)?.unitPaise ?? l.pricePaise; return <li key={l.productId} className="flex justify-between gap-3"><span className="truncate">{l.name} × {l.quantity}{quote?.lines.find((q) => q.productId === l.productId)?.returnDays === 0 && <span className="ml-1.5 text-xs font-medium text-amber-800">(no returns)</span>}</span><span><Money paise={unit * l.quantity} /></span></li>; })}
           </ul>
           <CouponBox code={coupon} setCode={setCoupon} quote={quote} />
+          <OfferList quote={quote} setCode={setCoupon} />
           <SummaryTotals quote={quote} itemCount={count} fallbackPaise={totalPaise} />
           {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <button disabled={busy || !user.verified || !!quote?.couponError} className="w-full rounded-xl bg-brand-500 px-6 py-3.5 font-semibold text-ink shadow-lg shadow-brand-500/25 hover:bg-brand-600 disabled:opacity-60">{busy ? (method === "ONLINE" ? "Opening payment…" : "Placing order…") : method === "ONLINE" ? `Pay ${formatPrice(total)}` : "Place order"}</button>

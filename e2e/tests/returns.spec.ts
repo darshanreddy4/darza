@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
 import { adminProduct, asBrowser, newCustomer } from "./helpers";
@@ -52,7 +53,7 @@ test.describe.serial("returns", () => {
     await page.goto("/orders");
     const card = page.getByRole("listitem").filter({ hasText: `#${short(orders[0])}` }).last();
     await card.getByRole("button", { name: /Return or refund/ }).click();
-    await card.getByLabel("Why are you returning these?").selectOption("Damaged or defective");
+    await pick(card.getByLabel("Why are you returning these?"), "Damaged or defective");
     await card.getByLabel("Details (optional)").fill("The screen cracked in the box");
     await card.getByLabel("UPI ID for your refund").fill("spec.user@okbank");
     await card.getByRole("button", { name: "Send return request" }).click();
@@ -78,7 +79,7 @@ test.describe.serial("returns", () => {
     await row.getByRole("button", { name: "Approve return" }).click();
     await expect(page.getByText("Return approved")).toBeVisible();
 
-    await page.getByLabel("Filter by status").selectOption("APPROVED");
+    await pick(page.getByLabel("Filter by status"), "APPROVED");
     const approved = page.getByRole("article", { name: `Return for order ${short(orders[0])}` });
     await expect(approved).toContainText("Approved");
     page.once("dialog", (d) => d.accept());

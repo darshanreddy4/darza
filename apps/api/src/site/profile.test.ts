@@ -82,3 +82,17 @@ test("the website address is reduced to its origin and must be https", () => {
   assert.match(errors({ siteUrl: "http://acme.in" }), /website address/);
   assert.match(errors({ siteUrl: "javascript:alert(1)" }), /website address/);
 });
+
+test("legal details are checked and the footer messages default to on", () => {
+  const p = ok({ legalName: " Acme Pvt Ltd ", gstin: "29abcde1234f1z5", grievanceOfficer: "A. Rao", grievanceEmail: "grievance@acme.test" });
+  assert.deepEqual([p.legalName, p.gstin, p.grievanceOfficer, p.grievanceEmail], ["Acme Pvt Ltd", "29ABCDE1234F1Z5", "A. Rao", "grievance@acme.test"]);
+  assert.deepEqual([p.announcementOn, p.transparencyOn, p.announcement, p.transparencyNote], [true, true, "", ""]);
+  assert.match(errors({ gstin: "12345" }), /GSTIN/);
+  assert.match(errors({ grievanceEmail: "nope" }), /grievance/);
+});
+
+test("the top bar message and footer note can be rewritten or switched off", () => {
+  const p = ok({ announcement: "Free delivery this week", announcementOn: false, transparencyNote: "x".repeat(900), transparencyOn: false });
+  assert.deepEqual([p.announcement, p.announcementOn, p.transparencyOn], ["Free delivery this week", false, false]);
+  assert.equal(p.transparencyNote.length, 600);
+});

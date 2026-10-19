@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
-import { asBrowser } from "./helpers";
+import { asBrowser, expectOptions } from "./helpers";
 
 test.use({ storageState: AUTH_FILES.admin });
 
@@ -50,7 +50,7 @@ test.describe.serial("inventory alerts", () => {
     expect(saved).toMatchObject({ lowStockThreshold: 3, alertEmail: "stock@dmg.test" });
 
     await page.goto("/admin/products");
-    await expect(page.getByRole("option", { name: "Low stock (1–3)" })).toBeAttached();
+    await expectOptions(page.getByLabel("Filter by stock"), { present: ["Low stock (1–3)"] });
   });
 
   test("a bad alert address is refused", async ({ request }) => {

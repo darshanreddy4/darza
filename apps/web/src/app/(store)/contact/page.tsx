@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage, Section } from "@/components/LegalPage";
 import { SocialIcon } from "@/components/SocialIcons";
-import { business, getBusiness } from "@/lib/business";
+import { getBusiness } from "@/lib/business";
 import { contactLinks, getSite, whatsappUrl } from "@/lib/site-profile";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -14,12 +14,12 @@ export default async function ContactPage() {
   const links = contactLinks(site, biz.email);
   const wa = whatsappUrl(site);
   const rows: [string, string | undefined][] = [
-    ["Business name", business.legalName || biz.name],
+    ["Business name", biz.legalName || biz.name],
     ["Registered address", biz.address],
     ["Support email", biz.email],
     ["Support phone", biz.phone],
     ["Customer care hours", site.careHours],
-    ["GSTIN", business.gstin],
+    ["GSTIN", biz.gstin],
   ];
   return (
     <LegalPage title="Contact & Grievance">
@@ -47,8 +47,8 @@ export default async function ContactPage() {
         )}
       </Section>
       <Section title="Grievance officer">
-        {business.grievanceOfficer ? (
-          <p>If you have a complaint about the site, a product, your order or your personal data, write to our Grievance Officer, <strong>{business.grievanceOfficer}</strong>{business.grievanceEmail ? <> at <a href={`mailto:${business.grievanceEmail}`} className="text-brand-700 underline">{business.grievanceEmail}</a></> : null}. We acknowledge every complaint within 48 hours and aim to resolve it within one month.</p>
+        {biz.grievanceOfficer ? (
+          <p>If you have a complaint about the site, a product, your order or your personal data, write to our Grievance Officer, <strong>{biz.grievanceOfficer}</strong>{biz.grievanceEmail ? <> at <a href={`mailto:${biz.grievanceEmail}`} className="text-brand-700 underline">{biz.grievanceEmail}</a></> : null}. We acknowledge every complaint within 48 hours and aim to resolve it within one month.</p>
         ) : (
           <p>Grievance officer details will be published here.</p>
         )}

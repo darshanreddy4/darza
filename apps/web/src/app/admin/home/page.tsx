@@ -21,6 +21,10 @@ function summary(w: HomeWidget): string {
     case "promo-banner": return c.title ? `“${c.title}”` : "Image only";
     case "image-tiles": return count(c.items?.length ?? 0, "tile");
     case "tile-carousel": return [count(c.items?.length ?? 0, "tile"), `${c.perView} at a time`].join(" · ");
+    case "icon-grid": return [count(c.items?.length ?? 0, "icon"), `${c.columns} per row`].join(" · ");
+    case "brand-cards": return [c.title && `“${c.title}”`, count(c.items?.length ?? 0, "card")].filter(Boolean).join(" · ");
+    case "image-banner": return [c.title && `“${c.title}”`, c.imageUrl ? "picture added" : "no picture yet", c.badge && `tag “${c.badge}”`].filter(Boolean).join(" · ");
+    case "offer-cards": return [c.title && `“${c.title}”`, count(c.items?.length ?? 0, "card"), c.layout === "grid" ? "grid" : "slider"].filter(Boolean).join(" · ");
     case "trust-bar": return count(c.items?.length ?? 0, "highlight");
     case "text": return c.title ? `“${c.title}”` : "Text only";
     case "faq": return count(c.items?.length ?? 0, "question");

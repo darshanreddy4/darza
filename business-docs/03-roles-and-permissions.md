@@ -67,6 +67,8 @@ Legend: ✅ allowed · ❌ not allowed · ➖ not applicable
 | Banners and the home page layout | ❌ | ✅ |
 | Coupons (create, edit, delete, see usage) | ❌ | ✅ |
 | Brand and contact details | ❌ | ✅ |
+| Store look and offered currencies | ❌ | ✅ |
+| Pages & policies, message bar and footer note | ❌ | ✅ |
 | Store settings (delivery, tax, invoice, returns, stock alerts, reports) | ❌ | ✅ |
 | Analytics, sales reports, affiliate click report | ❌ | ✅ |
 | Abandoned carts | ❌ | ✅ |

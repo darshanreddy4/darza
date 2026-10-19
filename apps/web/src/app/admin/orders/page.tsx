@@ -6,10 +6,11 @@ import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { useAuth } from "@/lib/auth";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, inputCls, td, th } from "@/components/admin/ui";
 import { useBrand } from "@/components/BrandProvider";
+import { Select } from "@/components/Select";
 
 interface Order {
   id: string; status: string; totalPaise: number; createdAt: string; paymentMethod: string; shippingName: string; cancelReason?: string | null;
-  subtotalPaise: number; discountPaise: number; shippingPaise: number; couponCode: string | null; refundId: string | null; whatsappOptIn?: boolean; refundedPaise: number; paymentId: string | null;
+  subtotalPaise: number; discountPaise: number; rewardDiscountPaise: number; shippingPaise: number; couponCode: string | null; gifts: string[]; refundId: string | null; whatsappOptIn?: boolean; refundedPaise: number; paymentId: string | null;
   shippingAddr: { name: string; phone: string; line1: string; line2?: string; city: string; state: string; pincode: string };
   user: { name: string; email: string | null; phone: string | null };
   items: { id: string; quantity: number; pricePaise: number; costPaise: number | null; product: { name: string } }[];
@@ -45,10 +46,10 @@ export default function OrdersAdminPage() {
         title="Orders"
         description={`Orders placed on ${brand}. Cancelling or refunding returns stock to inventory.`}
         actions={
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
+          <Select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
             <option value="">All statuses</option>
             {STATUSES.map((s) => <option key={s} value={s}>{LABEL(s)}</option>)}
-          </select>
+          </Select>
         }
       />
       {error && <Alert tone="error" onClose={() => setError("")}>{error}</Alert>}
@@ -71,9 +72,9 @@ export default function OrdersAdminPage() {
                         <td className={`${td} text-right font-semibold`}>{formatPrice(o.totalPaise)}</td>
                         <td className={td}>
                           {final ? <Badge tone={TONE[o.status]}>{o.status.toLowerCase()}</Badge> : (
-                            <select value={o.status} onChange={(e) => setStatus(o, e.target.value)} className={`${inputCls} !w-auto py-1.5`} aria-label={`Status for order ${o.id.slice(-8)}`}>
+                            <Select value={o.status} onChange={(e) => setStatus(o, e.target.value)} className={`${inputCls} !w-auto py-1.5`} aria-label={`Status for order ${o.id.slice(-8)}`}>
                               {STATUSES.filter((s) => !staff || (s !== "CANCELLED" && s !== "REFUNDED")).map((s) => <option key={s} value={s}>{LABEL(s)}</option>)}
-                            </select>
+                            </Select>
                           )}
                         </td>
                       </tr>
@@ -85,11 +86,13 @@ export default function OrdersAdminPage() {
                               <ul className="space-y-1 text-sm">{o.items.map((i) => <li key={i.id} className="flex justify-between"><span>{i.product.name} × {i.quantity}</span><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>)}</ul>
                               <dl className="mt-2 space-y-1 border-t border-line pt-2 text-xs text-muted">
                                 <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatPrice(o.subtotalPaise)}</dd></div>
-                                {o.discountPaise > 0 && <div className="flex justify-between"><dt>Discount{o.couponCode ? ` (${o.couponCode})` : ""}</dt><dd>-{formatPrice(o.discountPaise)}</dd></div>}
+                                {o.rewardDiscountPaise > 0 && <div className="flex justify-between"><dt>Order reward</dt><dd>-{formatPrice(o.rewardDiscountPaise)}</dd></div>}
+                                {o.discountPaise - o.rewardDiscountPaise > 0 && <div className="flex justify-between"><dt>Discount{o.couponCode ? ` (${o.couponCode})` : ""}</dt><dd>-{formatPrice(o.discountPaise - o.rewardDiscountPaise)}</dd></div>}
                                 <div className="flex justify-between"><dt>Delivery</dt><dd>{o.shippingPaise > 0 ? formatPrice(o.shippingPaise) : "Free"}</dd></div>
                                 <div className="flex justify-between font-semibold text-ink"><dt>Total</dt><dd>{formatPrice(o.totalPaise)}</dd></div>
                               </dl>
                               {o.status === "CANCELLED" && o.cancelReason && <p className="mt-2 text-xs text-muted">Cancellation reason: {o.cancelReason}</p>}
+                              {o.gifts.length > 0 && <p className="mt-2 text-xs font-semibold text-brand-800">Pack with this order: {o.gifts.join(", ")}</p>}
                               <p className="mt-2 text-xs text-muted">Payment: {o.paymentMethod === "COD" ? "Pay on delivery" : "Online (Razorpay)"}{o.status !== "PENDING_PAYMENT" && o.status !== "CANCELLED" && <> · <a href={`/invoice/${o.id}`} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 hover:underline">Open invoice</a></>}</p>
                               {o.whatsappOptIn && <p className="mt-1 text-xs text-muted">WhatsApp updates on for {o.shippingAddr.phone}</p>}
                               {o.refundedPaise > 0 && <p className="mt-1 text-xs font-medium text-brand-800">Refunded {formatPrice(o.refundedPaise)} through Razorpay{o.refundId ? ` (${o.refundId})` : ""}</p>}

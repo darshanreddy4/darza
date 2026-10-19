@@ -1,18 +1,20 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import { AddressDto } from "./address.dto";
+import { PincodeService } from "./pincode.service";
 
 const MAX_ADDRESSES = 10;
 
 @Injectable()
 export class AddressesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private pincodes: PincodeService) {}
 
   list(userId: string) {
     return this.prisma.address.findMany({ where: { userId }, orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] });
   }
 
   async create(userId: string, dto: AddressDto) {
+    await this.pincodes.assertValid(dto.pincode);
     const count = await this.prisma.address.count({ where: { userId } });
     if (count >= MAX_ADDRESSES) throw new BadRequestException(`You can save up to ${MAX_ADDRESSES} addresses. Delete one first.`);
     return this.prisma.$transaction(async (tx) => {
@@ -25,6 +27,7 @@ export class AddressesService {
 
   async update(userId: string, id: string, dto: AddressDto) {
     await this.owned(userId, id);
+    await this.pincodes.assertValid(dto.pincode);
     return this.prisma.$transaction(async (tx) => {
       if (dto.isDefault) await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
       return tx.address.update({ where: { id }, data: { ...this.fields(dto), ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }) } });

@@ -52,6 +52,9 @@ The API **refuses to start** in production if a setting is unsafe (short secret,
 | `REDIS_URL` | Caching. Empty means no cache |
 | `LOG_FORMAT=json` | One JSON object per log line |
 | `ERROR_WEBHOOK_URL` | A message to Slack, Discord or any JSON webhook with a text field on unexpected errors (rate-limited so it cannot flood) |
+| `EXCHANGE_RATE_URL` | Where live currency rates come from. Default `https://open.er-api.com/v6/latest/INR`; any URL returning `{"rates":{"USD":0.0125,...}}` per 1 INR works |
+| `NODE_EXTRA_CA_CERTS` | Path to your company's certificate file (set in the shell that starts the API, not in `.env`). Needed only when a corporate network makes live rate fetching fail with a certificate error |
+| `DISABLE_RATE_REFRESH=true` | Stops automatic currency-rate fetching (admins can still type their own rates) |
 | `PORT` | API port (default 4000) |
 
 ### Test-only flags (never in production)
@@ -64,7 +67,7 @@ The API **refuses to start** in production if a setting is unsafe (short secret,
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | Yes | Public address of the API |
 | `NEXT_PUBLIC_SITE_URL` | Yes | Public address of the shop (links, sitemap, search-engine tags) |
-| `NEXT_PUBLIC_BUSINESS_NAME`, `_LEGAL_NAME`, `_SUPPORT_EMAIL`, `_SUPPORT_PHONE`, `_BUSINESS_ADDRESS`, `_GSTIN`, `_GRIEVANCE_OFFICER`, `_GRIEVANCE_EMAIL` | No | Starting values for the policy and contact pages. Anything entered in **Admin → Brand & contact** takes over |
+| `NEXT_PUBLIC_BUSINESS_NAME`, `_LEGAL_NAME`, `_SUPPORT_EMAIL`, `_SUPPORT_PHONE`, `_BUSINESS_ADDRESS`, `_GSTIN`, `_GRIEVANCE_OFFICER`, `_GRIEVANCE_EMAIL` | No | Starting values for the policy and contact pages. Anything entered in **Admin → Brand & contact** (including the legal name, GSTIN and grievance officer) takes over, so you can leave these empty |
 
 ## What to configure in the admin area (after first login)
 

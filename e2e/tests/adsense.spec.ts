@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
 import { asBrowser } from "./helpers";
@@ -14,7 +15,7 @@ async function addAd(page: Page, placement: string, code = SNIPPET) {
   await page.getByRole("button", { name: "+ Add widget" }).click();
   await page.getByRole("button", { name: /^Google AdSense ad/ }).click();
   await page.getByLabel("Paste your AdSense ad code").fill(code);
-  await page.getByLabel("Where it shows").selectOption(placement);
+  await pick(page.getByLabel("Where it shows"), placement);
 }
 
 async function save(page: Page) {
@@ -76,7 +77,7 @@ test.describe.serial("AdSense widget", () => {
   test("a side ad shows only on wide screens", async ({ page }) => {
     await page.goto("/admin/home");
     await page.getByRole("button", { name: "Edit" }).last().click();
-    await page.getByLabel("Where it shows").selectOption("right-rail");
+    await pick(page.getByLabel("Where it shows"), "right-rail");
     await save(page);
 
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -91,7 +92,7 @@ test.describe.serial("AdSense widget", () => {
   test("a sticky bottom ad can be closed by the visitor", async ({ page }) => {
     await page.goto("/admin/home");
     await page.getByRole("button", { name: "Edit" }).last().click();
-    await page.getByLabel("Where it shows").selectOption("bottom-bar");
+    await pick(page.getByLabel("Where it shows"), "bottom-bar");
     await save(page);
 
     await page.goto("/");

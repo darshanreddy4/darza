@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { API_URL } from "@/lib/api";
+import { DEFAULT_LOGO_DESIGN, type LogoDesign } from "@/lib/logo";
 
 export const SOCIAL_PLATFORMS = [
   { key: "instagram", label: "Instagram", placeholder: "@yourbrand or https://instagram.com/yourbrand" },
@@ -19,7 +20,16 @@ export interface SiteProfile {
   siteUrl: string;
   logoUrl: string;
   logoOnBadge: boolean;
+  logoDesign: LogoDesign;
   tagline: string;
+  legalName: string;
+  gstin: string;
+  grievanceOfficer: string;
+  grievanceEmail: string;
+  announcement: string;
+  announcementOn: boolean;
+  transparencyNote: string;
+  transparencyOn: boolean;
   about: string;
   email: string;
   phone: string;
@@ -34,7 +44,8 @@ export interface SiteProfile {
 }
 
 export const EMPTY_SITE: SiteProfile = {
-  brandName: "", siteUrl: "", logoUrl: "", logoOnBadge: false, tagline: "", about: "", email: "", phone: "", address: "",
+  brandName: "", siteUrl: "", logoUrl: "", logoOnBadge: false, logoDesign: DEFAULT_LOGO_DESIGN, tagline: "", legalName: "", gstin: "", grievanceOfficer: "", grievanceEmail: "",
+  announcement: "", announcementOn: true, transparencyNote: "", transparencyOn: true, about: "", email: "", phone: "", address: "",
   careHours: "", careNote: "", whatsapp: "", whatsappMessage: "", whatsappButton: false, socials: {}, otherLinks: [],
 };
 

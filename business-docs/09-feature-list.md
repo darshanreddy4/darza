@@ -20,6 +20,10 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] Cart that works without an account and survives closing the tab
 - [x] Coupon codes with live discount, including personal codes shown in My account
 - [x] Delivery fee shown live (flat, free above an amount, always free or never free)
+- [x] Delivery rules: heavy products always charged, area fees by PIN code, free delivery on everything for big orders
+- [x] Rewards progress line in the cart and checkout with a celebration when a reward is unlocked: free delivery, free gifts or surprises, and percentage-off rewards
+- [x] Delete icon beside each cart item
+- [x] Coupons the shopper can use are listed in the cart and checkout, and shown on the progress bar at the amount that unlocks them; the admin chooses whether a code is shown
 - [x] Saved addresses with a default; state list, pincode and phone checks
 - [x] Pay on delivery
 - [x] Pay online by card, UPI or net banking (Razorpay)
@@ -67,9 +71,9 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] Categories with parents and children
 
 ### Selling and marketing
-- [x] Coupons: percentage or flat, minimum order, maximum discount, dates, total and per-customer limits, first-order only, personal codes
+- [x] Coupons: percentage or flat, minimum order, maximum discount, dates, total and per-customer limits, first-order only, private codes for one or many customers, one use per person across accounts (email and mobile number), usage list, race-safe last use
 - [x] Banners and sliders with schedule, countdown, video, position, impressions and clicks
-- [x] Home page designer: 14 block types, drag order, show or hide, reset to default
+- [x] Home page designer: 18 block types (including icon grids, brand promo cards, wide spotlight banners and offer cards with deal strips and festive panels), drag order, show or hide, reset to default
 - [x] Google AdSense slot (optional)
 
 ### Orders and money
@@ -89,7 +93,12 @@ A checklist you can use to show a client what they are getting, or to check noth
 
 ### People and branding
 - [x] Users: search, filter, export, change roles (customer, staff, admin), sign a person out everywhere
+- [x] Logo designer: picture logo with 3D, shadow or glow effects and one-click transparent background, or a text logo with 14 fonts, a colour for every letter, gradients and 3D, outline or glow effects
+- [x] Pages & policies: edit or hide the terms, privacy, shipping, refund and affiliate pages, add pages of your own with a live preview, and change the message bar and footer note
+- [x] Legal and grievance details (registered name, GSTIN, grievance officer) set in the admin portal
 - [x] Brand name, logo, tagline, about text, contact details, WhatsApp button, social links; shown across the site, emails and invoices
+- [x] Store look chosen by the admin: default, minimalism, maximalism, glassmorphism, neumorphism, flat, material or editorial design
+- [x] Price currency switcher for shoppers: admin chooses which currencies are offered, live rates refresh automatically, admin can set own rates; display only, charged in rupees
 - [x] Search index status and rebuild
 
 ## For the technical team

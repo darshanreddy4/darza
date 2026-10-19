@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
 import { asBrowser } from "./helpers";
@@ -31,7 +32,7 @@ test.describe.serial("scheduled sales report", () => {
   test("the schedule is set in Settings and the report can be sent to try it", async ({ page, request }) => {
     await page.goto("/admin/settings");
     await expect(page.getByRole("button", { name: "Send the last report now" })).toBeDisabled();
-    await page.getByLabel("How often").selectOption("WEEKLY");
+    await pick(page.getByLabel("How often"), "WEEKLY");
     await page.getByLabel("Send it to").fill("accounts@dmg.test");
     await page.getByRole("button", { name: "Save settings" }).click();
     await expect(page.getByText("Settings saved")).toBeVisible();

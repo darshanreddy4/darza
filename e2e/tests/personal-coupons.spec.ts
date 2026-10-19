@@ -23,11 +23,11 @@ test.describe.serial("personal and first-order coupons", () => {
     await page.getByRole("button", { name: "+ New coupon" }).click();
     await page.getByLabel(/^Code/).fill("VIPONLY");
     await page.getByLabel(/^Percentage/).fill("20");
-    await page.getByLabel(/Only for one customer/).fill("nobody@dmg.test");
+    await page.getByLabel(/Only for these customers/).fill("nobody@dmg.test");
     await page.getByRole("button", { name: "Create coupon" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "No customer has that email" })).toBeVisible();
 
-    await page.getByLabel(/Only for one customer/).fill(CUSTOMER.email);
+    await page.getByLabel(/Only for these customers/).fill(CUSTOMER.email);
     await page.getByRole("button", { name: "Create coupon" }).click();
     await expect(page.getByText("Coupon created")).toBeVisible();
     await expect(page.getByRole("row", { name: /VIPONLY/ })).toContainText(`Only for ${CUSTOMER.name}`);

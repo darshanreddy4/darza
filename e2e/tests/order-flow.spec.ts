@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test } from "@playwright/test";
 import { AUTH_FILES, money } from "./data";
 import { adminProduct } from "./helpers";
@@ -36,7 +37,7 @@ test.describe.serial("buying a DMG product", () => {
       await page.getByPlaceholder("10-digit mobile number").fill("9876543210");
       await page.getByPlaceholder("Address line 1").fill("12 Test Street");
       await page.getByPlaceholder("City").fill("Bengaluru");
-      await page.getByLabel("State").selectOption({ label: "Karnataka" });
+      await pick(page.getByLabel("State"), { label: "Karnataka" });
       await page.getByPlaceholder("Pincode").fill("560001");
       await page.getByRole("button", { name: /place order/i }).click();
 
@@ -77,7 +78,7 @@ test.describe.serial("buying a DMG product", () => {
       await page.goto("/admin/orders");
       const select = page.getByLabel(`Status for order ${orderId.slice(-8)}`);
       await expect(select).toBeVisible();
-      await select.selectOption("SHIPPED");
+      await pick(select, "SHIPPED");
       await expect(page.getByText("Order updated to shipped")).toBeVisible();
     });
 

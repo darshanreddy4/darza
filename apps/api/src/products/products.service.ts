@@ -10,7 +10,9 @@ import { ProductDto } from "./product.dto";
 import { DEFAULT_AFFILIATE_DISCLOSURE, validateProductRules } from "./product-rules";
 import { isSupportedVideoUrl } from "./video-url";
 import { buildAdminProductQuery, type AdminProductQuery } from "./admin-query";
-import { publicCardFields } from "./card-options";
+import { publicCardFields, publicExtraFields, SOLD_ORDER_STATUSES } from "./card-options";
+import { productReturnDays } from "./return-policy";
+import { activeSale, validateSale } from "./sale";
 import { planBulkPatch, validateBulkChanges } from "./bulk-update";
 import type { BulkUpdateProductsDto } from "./bulk-update.dto";
 
@@ -31,13 +33,21 @@ type Rating = { avg: number; count: number };
 const PUBLIC_TTL = 30;
 
 // Hides the raw affiliate URL (clicks go through /go/:slug), SKU, cost and exact stock.
-function toPublic(p: ProductWithImages, rating: Rating | undefined, brand: string) {
-  const { sku, stock, affiliateUrl, status, costPaise, ...rest } = p;
+function toPublic(p: ProductWithImages, rating: Rating | undefined, brand: string, lowStockThreshold: number, unitsSold: number, storeReturnDays: number) {
+  const { sku, stock, affiliateUrl, status, costPaise, multiBuyQty, multiBuyPercent, showSold, salePricePaise, saleEndsAt, ...rest } = p;
+  const sale = activeSale(p);
   // Our own products are sold under the brand name unless the admin typed another seller.
   return applyBrand({
     ...rest,
+    // While a sale runs the sale price is the price, and the normal price is shown struck through when there is no MRP.
+    pricePaise: sale ? sale.pricePaise : p.pricePaise,
+    mrpPaise: p.mrpPaise ?? (sale ? p.pricePaise : null),
+    sale: sale ? { endsAt: sale.endsAt.toISOString() } : null,
+    // Days after delivery the product can be returned; 0 means it cannot.
+    returnDays: productReturnDays(p, storeReturnDays),
     sellerName: p.productType === "OWN" && !p.sellerName.trim() ? brand : p.sellerName,
     ...publicCardFields(p),
+    ...publicExtraFields(p, lowStockThreshold, unitsSold),
     inStock: p.productType === "OWN" ? (stock ?? 0) > 0 : null,
     ratingAvg: rating ? Math.round(rating.avg * 10) / 10 : null,
     ratingCount: rating?.count ?? 0,
@@ -81,15 +91,26 @@ export class ProductsService {
   }
 
   async toPublicList(products: ProductWithImages[]) {
-    const groups = await this.prisma.review.groupBy({
-      by: ["productId"],
-      where: { productId: { in: products.map((p) => p.id) } },
-      _avg: { rating: true },
-      _count: { _all: true },
-    });
+    const ids = products.map((p) => p.id);
+    const [groups, sales, settings, brand] = await Promise.all([
+      this.prisma.review.groupBy({
+        by: ["productId"],
+        where: { productId: { in: ids } },
+        _avg: { rating: true },
+        _count: { _all: true },
+      }),
+      this.prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: { productId: { in: ids }, order: { status: { in: [...SOLD_ORDER_STATUSES] } } },
+        _sum: { quantity: true, returnedQty: true },
+      }),
+      this.prisma.storeSettings.findUnique({ where: { id: "default" }, select: { lowStockThreshold: true, returnWindowDays: true } }),
+      this.site.brandName(),
+    ]);
     const byId = new Map(groups.map((g) => [g.productId, { avg: g._avg.rating ?? 0, count: g._count._all }]));
-    const brand = await this.site.brandName();
-    return products.map((p) => toPublic(p, byId.get(p.id), brand));
+    const sold = new Map(sales.map((s) => [s.productId, (s._sum.quantity ?? 0) - (s._sum.returnedQty ?? 0)]));
+    const threshold = settings?.lowStockThreshold ?? 5;
+    return products.map((p) => toPublic(p, byId.get(p.id), brand, threshold, sold.get(p.id) ?? 0, settings?.returnWindowDays ?? 7));
   }
 
   getPublic(slug: string) {
@@ -114,7 +135,23 @@ export class ProductsService {
     });
     if (!p) throw new NotFoundException();
     const [pub] = await this.toPublicList([p]);
-    return { ...pub, category: p.category };
+    return { ...pub, category: p.category, variants: await this.variantsOf(p) };
+  }
+
+  // The other products in the same variant group, for the colour and pack size options on the product page.
+  private async variantsOf(p: ProductWithImages) {
+    if (!p.variantGroup) return [];
+    const rows = await this.prisma.product.findMany({
+      where: { variantGroup: p.variantGroup, status: "PUBLISHED" },
+      include: { images: { orderBy: { position: "asc" }, take: 1 } },
+      orderBy: [{ colorName: "asc" }, { pricePaise: "asc" }],
+      take: 40,
+    });
+    if (rows.length < 2) return [];
+    return rows.map((r) => ({
+      slug: r.slug, colorName: r.colorName, packSize: r.packSize, image: r.images[0]?.url ?? null,
+      inStock: r.productType === "OWN" ? (r.stock ?? 0) > 0 : null,
+    }));
   }
 
   async resolveAffiliateRedirect(slug: string, meta: { ip?: string; userAgent?: string; referrer?: string }) {
@@ -299,12 +336,15 @@ export class ProductsService {
 
   // Checks a product against the business rules and turns it into what the database stores; throws when it is not valid.
   normalise(dto: ProductDto) {
-    const problems = validateProductRules(dto);
+    const isAffiliate = dto.productType === "AFFILIATE";
+    const saleEndsAt = !isAffiliate && dto.saleEndsAt ? new Date(dto.saleEndsAt) : null;
+    const salePricePaise = !isAffiliate ? dto.salePricePaise ?? null : null;
+    const problems = [...validateProductRules(dto), ...validateSale({ pricePaise: dto.pricePaise, salePricePaise, saleEndsAt })];
+    if (dto.chargeDelivery && dto.freeDelivery) problems.push("A product cannot have free delivery and a delivery charge at once");
     if (problems.length) throw new BadRequestException(problems);
     const videoUrls = [...new Set(dto.videoUrls ?? [])];
     const badVideo = videoUrls.find((u) => !isSupportedVideoUrl(u));
     if (badVideo) throw new BadRequestException(`Unsupported video link: ${badVideo}. Use an https YouTube, Vimeo or .mp4/.webm link.`);
-    const isAffiliate = dto.productType === "AFFILIATE";
     return {
       name: dto.name,
       slug: dto.slug,
@@ -326,7 +366,21 @@ export class ProductsService {
       // Delivery and the cart button only apply to our own products.
       deliveryDays: isAffiliate ? null : dto.deliveryDays ?? null,
       freeDelivery: isAffiliate ? false : dto.freeDelivery ?? false,
+      chargeDelivery: !isAffiliate && dto.chargeDelivery === true,
+      deliveryFeePaise: !isAffiliate && dto.chargeDelivery ? dto.deliveryFeePaise ?? null : null,
       showAddToCart: isAffiliate ? false : dto.showAddToCart ?? false,
+      packSize: dto.packSize?.trim() || null,
+      saleTag: dto.saleTag ?? null,
+      showSold: dto.showSold ?? true,
+      multiBuyQty: isAffiliate ? null : dto.multiBuyQty ?? null,
+      multiBuyPercent: isAffiliate ? null : dto.multiBuyPercent ?? null,
+      salePricePaise,
+      saleEndsAt,
+      returnDays: isAffiliate ? null : dto.returnDays ?? null,
+      variantGroup: dto.variantGroup?.trim().toLowerCase() || null,
+      colorName: dto.colorName?.trim() || null,
+      warranty: dto.warranty?.trim() || null,
+      manufacturerInfo: dto.manufacturerInfo?.trim() || null,
       sku: isAffiliate ? null : dto.sku,
       stock: isAffiliate ? null : dto.stock,
       costPaise: isAffiliate ? null : dto.costPaise ?? null,

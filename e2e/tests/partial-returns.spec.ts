@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { API, AUTH_FILES, money } from "./data";
 import { adminProduct, asBrowser, newCustomer } from "./helpers";
@@ -35,8 +36,8 @@ test.describe.serial("returning only some of an order", () => {
     const card = page.getByRole("listitem").filter({ hasText: `#${short(orderId)}` }).last();
     await card.getByRole("button", { name: /Return or refund/ }).click();
     await card.getByLabel("E2E USB-C Cable").uncheck();
-    await card.getByLabel("Quantity").selectOption("1");
-    await card.getByLabel("Why are you returning these?").selectOption("Size or fit issue");
+    await pick(card.getByLabel("Quantity"), "1");
+    await pick(card.getByLabel("Why are you returning these?"), "Size or fit issue");
     await card.getByLabel("UPI ID for your refund").fill("spec.user@okbank");
     await card.getByRole("button", { name: "Send return request" }).click();
     await expect(card.getByText("Return requested")).toBeVisible();
@@ -61,7 +62,7 @@ test.describe.serial("returning only some of an order", () => {
     await expect(row).toContainText(`refund would be ${money(149900)}`);
     await row.getByRole("button", { name: "Approve return" }).click();
     await expect(page.getByText("Return approved")).toBeVisible();
-    await page.getByLabel("Filter by status").selectOption("APPROVED");
+    await pick(page.getByLabel("Filter by status"), "APPROVED");
     const approved = page.getByRole("article", { name: `Return for order ${short(orderId)}` });
     page.once("dialog", (d) => { expect(d.message()).toContain(money(149900)); void d.accept(); });
     await approved.getByRole("button", { name: "Item received, refund" }).click();
@@ -81,7 +82,7 @@ test.describe.serial("returning only some of an order", () => {
     await card.getByRole("button", { name: /Return more items/ }).click();
     await expect(card.getByLabel("E2E USB-C Cable")).toBeVisible();
     await expect(card.getByLabel("Quantity")).toHaveCount(0);
-    await card.getByLabel("Why are you returning these?").selectOption("Changed my mind");
+    await pick(card.getByLabel("Why are you returning these?"), "Changed my mind");
     await card.getByLabel("UPI ID for your refund").fill("spec.user@okbank");
     await card.getByRole("button", { name: "Send return request" }).click();
     await expect(card.getByText("Return requested")).toBeVisible();
@@ -93,7 +94,7 @@ test.describe.serial("returning only some of an order", () => {
     const row = page.getByRole("article", { name: `Return for order ${short(orderId)}` });
     await expect(row).toContainText(`refund would be ${money(179800)}`);
     await row.getByRole("button", { name: "Approve return" }).click();
-    await page.getByLabel("Filter by status").selectOption("APPROVED");
+    await pick(page.getByLabel("Filter by status"), "APPROVED");
     page.once("dialog", (d) => void d.accept());
     await page.getByRole("article", { name: `Return for order ${short(orderId)}` }).getByRole("button", { name: "Item received, refund" }).click();
     await expect(page.getByText("Refund recorded")).toBeVisible();

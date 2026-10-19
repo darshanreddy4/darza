@@ -3,17 +3,20 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { API_URL, imgSrc } from "@/lib/api";
 import { btn, inputCls } from "@/components/admin/ui";
+import { CLIPBOARD_BLOCKED, CLIPBOARD_EMPTY, readClipboardImage } from "@/components/admin/clipboard";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 const MAX_IMAGES = 12;
 
-export function ImageUploader({ images, setImages, max = MAX_IMAGES, hint }: { images: string[]; setImages: Dispatch<SetStateAction<string[]>>; max?: number; hint?: string }) {
+export function ImageUploader({ images, setImages, max = MAX_IMAGES, hint, crop }: { images: string[]; setImages: Dispatch<SetStateAction<string[]>>; max?: number; hint?: string; crop?: { w: number; h: number } }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [errors, setErrors] = useState<string[]>([]);
   const [urlDraft, setUrlDraft] = useState("");
+  const [autoCrop, setAutoCrop] = useState(true);
+  const cropQuery = crop && autoCrop ? `?crop=${crop.w}x${crop.h}` : "";
 
   const upload = useCallback(async (files: File[]) => {
     const problems: string[] = [];
@@ -30,7 +33,7 @@ export function ImageUploader({ images, setImages, max = MAX_IMAGES, hint }: { i
       const body = new FormData();
       body.append("file", file, file.name || "pasted-image.png");
       try {
-        const res = await fetch(`${API_URL}/admin/uploads`, { method: "POST", credentials: "include", body });
+        const res = await fetch(`${API_URL}/admin/uploads${cropQuery}`, { method: "POST", credentials: "include", body });
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error([data?.message].flat().filter(Boolean).join(", ") || "Upload failed");
         setImages((cur) => (max === 1 ? [data.url] : cur.length >= max ? cur : [...cur, data.url]));
@@ -40,7 +43,7 @@ export function ImageUploader({ images, setImages, max = MAX_IMAGES, hint }: { i
         setUploading((n) => n - 1);
       }
     }));
-  }, [setImages, max]);
+  }, [setImages, max, cropQuery]);
 
   // Paste screenshots or copied images anywhere on the page.
   useEffect(() => {
@@ -58,6 +61,13 @@ export function ImageUploader({ images, setImages, max = MAX_IMAGES, hint }: { i
     e.preventDefault();
     setDragging(false);
     upload(Array.from(e.dataTransfer.files));
+  }
+
+  async function pasteScreenshot() {
+    try {
+      const file = await readClipboardImage();
+      if (file) upload([file]); else setErrors([CLIPBOARD_EMPTY]);
+    } catch { setErrors([CLIPBOARD_BLOCKED]); }
   }
 
   function addUrl() {
@@ -97,6 +107,13 @@ export function ImageUploader({ images, setImages, max = MAX_IMAGES, hint }: { i
         <input ref={inputRef} type="file" accept={ACCEPT} multiple={max > 1} hidden onChange={(e) => { upload(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
       </div>
 
+      {crop && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-600" checked={autoCrop} onChange={(e) => setAutoCrop(e.target.checked)} />
+          <span>Crop automatically to fit<span className="block text-xs text-muted">Cuts each picture to {crop.w} × {crop.h} px, the size this spot needs, keeping the most interesting part. Animated GIFs are kept as they are.</span></span>
+        </label>
+      )}
+
       {errors.length > 0 && (
         <ul role="alert" className="space-y-1 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
       )}
@@ -125,6 +142,7 @@ export function ImageUploader({ images, setImages, max = MAX_IMAGES, hint }: { i
       <div className="flex gap-2">
         <input value={urlDraft} onChange={(e) => setUrlDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addUrl(); } }} placeholder="…or paste an image URL (https://)" aria-label="Image URL" className={inputCls} />
         <button type="button" onClick={addUrl} className={btn.secondary}>Add URL</button>
+        <button type="button" onClick={pasteScreenshot} className={btn.secondary}>Paste screenshot</button>
       </div>
     </div>
   );

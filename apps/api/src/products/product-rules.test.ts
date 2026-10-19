@@ -27,3 +27,11 @@ test("mrp below price is rejected", () => {
   const errs = validateProductRules({ productType: "OWN", pricePaise: 200, mrpPaise: 100, sku: "A", stock: 1 });
   assert.equal(errs.length, 1);
 });
+
+test("a multi-buy offer needs both its quantity and its percentage", () => {
+  const own = { productType: "OWN" as const, pricePaise: 1000, sku: "A-1", stock: 3 };
+  assert.deepEqual(validateProductRules({ ...own, multiBuyQty: 2, multiBuyPercent: 3 }), []);
+  assert.deepEqual(validateProductRules({ ...own }), []);
+  assert.match(validateProductRules({ ...own, multiBuyQty: 2 })[0], /both a quantity and a percentage/);
+  assert.match(validateProductRules({ ...own, multiBuyPercent: 3 })[0], /both a quantity and a percentage/);
+});

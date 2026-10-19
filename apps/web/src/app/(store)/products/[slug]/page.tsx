@@ -2,7 +2,15 @@ import Link from "next/link";
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { API_URL, formatPrice, imgSrc, type Product } from "@/lib/api";
+import { API_URL, imgSrc, type Product } from "@/lib/api";
+import { Money } from "@/lib/currency";
+import { msUntil, multiBuyText, soldText, type StoreDelivery } from "@/lib/labels";
+import { SaleTagBadge } from "@/components/ProductBadges";
+import { SaleTimer } from "@/components/SaleTimer";
+import { ShareButton } from "@/components/ShareButton";
+import { PincodeCheck } from "@/components/PincodeCheck";
+import { TrustStrip } from "@/components/TrustStrip";
+import { VariantOptions } from "@/components/VariantOptions";
 import { absoluteUrl, breadcrumbJsonLd, describe, productJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/JsonLd";
 import { getBrand, getSiteUrl } from "@/lib/site-profile";
@@ -55,9 +63,10 @@ interface Related {
 export default async function ProductPage({ params }: PageProps<"/products/[slug]">) {
   const { slug } = await params;
   const encoded = encodeURIComponent(slug);
-  const [product, relatedRes] = await Promise.all([
+  const [product, relatedRes, store] = await Promise.all([
     getProduct(slug),
     fetch(`${API_URL}/products/${encoded}/related`, { cache: "no-store" }).catch(() => null),
+    fetch(`${API_URL}/store/config`, { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<StoreDelivery>) : null)).catch(() => null),
   ]);
   if (!product) notFound();
   const [base, brand] = await Promise.all([getSiteUrl(), getBrand()]);
@@ -72,14 +81,17 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
     ...(product.category ? [["Category", <Link key="c" href={`/products?category=${product.category.slug}`} className="text-brand-700 hover:underline">{product.category.parent ? `${product.category.parent.name} › ` : ""}{product.category.name}</Link>] as [string, React.ReactNode]] : []),
     ["Sold by", product.sellerName],
     ["Fulfilment", own ? `Sold and fulfilled by ${product.sellerName || brand}` : `Purchased on ${product.platform}`],
+    ...(product.warranty ? [["Warranty", product.warranty] as [string, React.ReactNode]] : []),
     ...(own && product.deliveryInfo ? [["Delivery", product.deliveryInfo] as [string, React.ReactNode]] : []),
-    ...(own && product.returnPolicy ? [["Returns", product.returnPolicy] as [string, React.ReactNode]] : []),
+    ...(own ? [["Returns", product.returnPolicy || (product.returnDays > 0 ? `${product.returnDays}-day returns after delivery` : "No returns on this item")] as [string, React.ReactNode]] : []),
     ...specs.map(([k, v]) => [k, v] as [string, React.ReactNode]),
   ];
   const card = "scroll-mt-44 rounded-3xl border border-line bg-white p-7 shadow-card";
+  // Counted down on the page from this, so a wrong device clock cannot change the timer.
+  const saleMsLeft = product.sale ? msUntil(product.sale.endsAt) : 0;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 pb-20 lg:pb-0">
       <JsonLd data={productJsonLd(product, base)} />
       <JsonLd data={breadcrumbJsonLd([
         { name: "Home", path: "/" },
@@ -101,27 +113,47 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
 
         <div className="lg:sticky lg:top-40 lg:self-start">
           <div className="space-y-5 rounded-3xl border border-line bg-white p-7 shadow-card">
+            {product.sale && saleMsLeft > 0 && <SaleTimer msLeft={saleMsLeft} />}
             <SellerBadge product={product} />
             <div>
-              <h1 className="text-3xl font-bold leading-tight">{product.name}</h1>
-              {product.brand && <p className="mt-1 text-sm text-muted">by {product.brand}</p>}
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="text-3xl font-bold leading-tight">{product.name}</h1>
+                <ShareButton slug={product.slug} title={product.name} menu className="h-10 w-10 shrink-0 border border-line hover:border-brand-500" />
+              </div>
+              {product.brand && (
+                <p className="mt-1 text-sm text-muted">by {product.brand} · <Link href={`/products?q=${encodeURIComponent(product.brand)}`} className="font-semibold text-brand-700 hover:underline">Visit brand store</Link></p>
+              )}
+              {product.packSize && <p className="mt-1 text-sm text-muted">{product.packSize}</p>}
               {product.ratingCount > 0 && product.ratingAvg !== null && (
                 <a href="#reviews" className="mt-2 flex items-center gap-2 text-sm"><Stars value={product.ratingAvg} size={16} /> <strong>{product.ratingAvg}</strong> <span className="text-muted underline">{product.ratingCount} {product.ratingCount === 1 ? "review" : "reviews"}</span></a>
               )}
+              {product.soldCount > 0 && <p className="mt-1 text-sm font-medium text-ink-3">{soldText(product.soldCount)}</p>}
             </div>
 
             <div>
               <div className="flex flex-wrap items-baseline gap-3">
-                <span className="font-display text-4xl font-bold">{formatPrice(product.pricePaise)}</span>
+                <span className="font-display text-4xl font-bold"><Money paise={product.pricePaise} /></span>
                 {discount > 0 && (
                   <>
-                    <span className="text-muted line-through">{formatPrice(product.mrpPaise!)}</span>
+                    <span className="text-muted line-through"><Money paise={product.mrpPaise!} /></span>
                     <span className="rounded-md bg-brand-50 px-2 py-0.5 text-sm font-semibold text-brand-800">Save {discount}%</span>
                   </>
                 )}
+                {product.sale && <span className="rounded-md bg-red-50 px-2 py-0.5 text-sm font-bold text-red-700">Sale price</span>}
               </div>
               {!own && <p className="mt-1 text-xs text-muted">Price may change on {product.platform}. Check the final price there.</p>}
+              {(product.saleTag || (own && product.lowStock) || product.multiBuy) && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {product.saleTag && <SaleTagBadge tag={product.saleTag} />}
+                  {own && product.lowStock && <span className="text-sm font-semibold text-red-700">Only few left</span>}
+                  {product.multiBuy && <span className="text-sm font-semibold text-green-800">{multiBuyText(product.multiBuy)}</span>}
+                </div>
+              )}
             </div>
+
+            {product.variants && product.variants.length > 1 && <VariantOptions variants={product.variants} currentSlug={product.slug} />}
+
+            {own && <PincodeCheck product={product} store={store} />}
 
             <PurchaseActions product={product} />
             <WishlistButton productId={product.id} label className="w-full rounded-xl border border-line py-2.5 hover:border-rose-300" />
@@ -130,9 +162,11 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
             <dl className="divide-y divide-line rounded-2xl bg-canvas text-sm">
               <Row label="Sold by" value={product.sellerName} />
               {own && product.deliveryInfo && <Row label="Delivery" value={product.deliveryInfo} />}
-              {own && product.returnPolicy && <Row label="Returns" value={product.returnPolicy} />}
+              {own && <Row label="Returns" value={product.returnPolicy || (product.returnDays > 0 ? `${product.returnDays}-day returns after delivery` : "No returns on this item")} />}
               {!own && <Row label="Delivery & returns" value={`Handled by ${product.platform}`} />}
+              {own && product.warranty && <Row label="Warranty" value={product.warranty} />}
             </dl>
+            {own && <TrustStrip product={product} store={store} />}
           </div>
         </div>
       </div>
@@ -177,6 +211,13 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
           ))}
         </dl>
       </section>
+
+      {product.manufacturerInfo && (
+        <section id="manufacturer" className={card}>
+          <h2 className="text-xl font-bold">Manufacturer and packer details</h2>
+          <p className="mt-3 whitespace-pre-line leading-relaxed text-ink-3">{product.manufacturerInfo}</p>
+        </section>
+      )}
 
       <Reviews slug={product.slug} />
 

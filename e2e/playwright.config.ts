@@ -33,6 +33,9 @@ export default defineConfig({
       env: {
         PORT: "4100",
         DISABLE_RATE_LIMIT: "true",
+        // Exchange rates come from a small stand-in server the currency test starts, never from the internet.
+        DISABLE_RATE_REFRESH: "true",
+        EXCHANGE_RATE_URL: "http://127.0.0.1:4199/rates",
         // Lets the tests read the one-time code that would be sent by SMS.
         OTP_DEBUG_RESPONSE: "true",
         OTP_RESEND_SECONDS: "3",
@@ -41,6 +44,8 @@ export default defineConfig({
         CART_REMINDER_INTERVAL_SECONDS: "2",
         STOCK_ALERT_INTERVAL_SECONDS: "2",
         INVENTORY_ALERT_INTERVAL_SECONDS: "2",
+        // PIN codes are checked by their first digits only, never against a lookup service on the internet.
+        PINCODE_LOOKUP: "off",
         GOOGLE_CLIENT_ID: "",
         DATABASE_URL: process.env.E2E_DATABASE_URL ?? "",
         JWT_SECRET: "e2e-only-secret-that-is-long-enough-0123456789",

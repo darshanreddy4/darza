@@ -1,25 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeTotals, shippingFor } from "./pricing";
 import { evaluateCoupon, normalizeCouponCode, type CouponLike } from "./coupon-rules";
 import { allocateDiscount, buildInvoice, financialYear, formatInvoiceNumber } from "./invoice";
-
-const rule = { shippingFeePaise: 4900, freeShippingOverPaise: 49900 };
-
-test("delivery fee applies below the free-delivery amount only", () => {
-  assert.equal(shippingFor(49899, rule), 4900);
-  assert.equal(shippingFor(49900, rule), 0);
-  assert.equal(shippingFor(100, { shippingFeePaise: 0, freeShippingOverPaise: null }), 0);
-  assert.equal(shippingFor(10_000_000, { shippingFeePaise: 4900, freeShippingOverPaise: null }), 4900);
-});
-
-test("totals subtract the discount before delivery is decided", () => {
-  assert.deepEqual(computeTotals(60000, 0, rule), { subtotalPaise: 60000, discountPaise: 0, shippingPaise: 0, totalPaise: 60000, freeShippingGapPaise: 0 });
-  // A coupon can drop the cart below the free-delivery line.
-  assert.deepEqual(computeTotals(60000, 20000, rule), { subtotalPaise: 60000, discountPaise: 20000, shippingPaise: 4900, totalPaise: 44900, freeShippingGapPaise: 9900 });
-  assert.equal(computeTotals(0, 0, rule).shippingPaise, 0);
-  assert.equal(computeTotals(1000, 5000, rule).discountPaise, 1000);
-});
 
 const coupon = (over: Partial<CouponLike> = {}): CouponLike => ({
   type: "PERCENT", value: 10, minOrderPaise: 0, maxDiscountPaise: null, startsAt: null, endsAt: null, usageLimit: null, perUserLimit: null, active: true, ...over,
@@ -107,11 +89,22 @@ test("financial year and invoice numbers", () => {
   assert.equal(formatInvoiceNumber("DZ", new Date("2026-10-12T10:00:00Z"), 42), "DZ/2026-27/00042");
 });
 
-test("a personal code works only for its customer", () => {
-  const personal = coupon({ userId: "u1" });
+test("a code for chosen customers works only for them", () => {
+  const personal = coupon({ customerIds: ["u1", "u3"] });
   assert.deepEqual(evaluateCoupon(personal, ctx({ userId: "u1" })), { ok: true, discountPaise: 10000 });
+  assert.deepEqual(evaluateCoupon(personal, ctx({ userId: "u3" })), { ok: true, discountPaise: 10000 });
   assert.deepEqual(evaluateCoupon(personal, ctx({ userId: "u2" })), { ok: false, reason: "This code is not valid for your account" });
   assert.deepEqual(evaluateCoupon(personal, ctx()), { ok: false, reason: "Log in to use this code" });
+  // No chosen customers means everyone.
+  assert.equal(evaluateCoupon(coupon({ customerIds: [] }), ctx()).ok, true);
+});
+
+test("a one-use-per-customer code is also used up by the same email or phone on another account", () => {
+  const once = coupon({ perUserLimit: 1 });
+  assert.equal(evaluateCoupon(once, ctx({ userId: "u1", usedByUser: 0, usedByIdentity: 0 })).ok, true);
+  assert.deepEqual(evaluateCoupon(once, ctx({ userId: "u1", usedByUser: 1, usedByIdentity: 1 })), { ok: false, reason: "You have already used this code" });
+  assert.deepEqual(evaluateCoupon(once, ctx({ userId: "u2", usedByUser: 0, usedByIdentity: 1 })), { ok: false, reason: "This code has already been used with your email address or mobile number" });
+  assert.equal(evaluateCoupon(coupon({ perUserLimit: 2 }), ctx({ userId: "u2", usedByUser: 0, usedByIdentity: 1 })).ok, true);
 });
 
 test("a first-order code is refused once the customer has ordered", () => {

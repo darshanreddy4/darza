@@ -16,7 +16,9 @@ export class CouponDto {
   @IsOptional() @IsInt() @Min(1) @Max(10_000_000) usageLimit?: number;
   @IsOptional() @IsInt() @Min(1) @Max(1000) perUserLimit?: number;
   @IsOptional() @IsBoolean() active?: boolean;
-  // Email or mobile number of the one customer who may use the code; an empty string makes it public again.
-  @IsOptional() @IsString() @MaxLength(120) customer?: string;
+  // Emails or mobile numbers of the customers who may use the code, separated by commas or new lines; an empty string makes it public again.
+  @IsOptional() @IsString() @MaxLength(5000) customers?: string;
   @IsOptional() @IsBoolean() firstOrderOnly?: boolean;
+  // Show the code to the customers who can use it (default), or keep it a code they have to be given.
+  @IsOptional() @IsBoolean() visible?: boolean;
 }

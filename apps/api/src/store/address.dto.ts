@@ -9,6 +9,6 @@ export class AddressDto {
   @IsOptional() @IsString() @MaxLength(200) line2?: string;
   @IsString() @MinLength(1) @MaxLength(80) city!: string;
   @IsIn(IN_STATES) state!: string;
-  @Matches(/^\d{6}$/, { message: "pincode must be 6 digits" }) pincode!: string;
+  @Matches(/^[1-9]\d{5}$/, { message: "Enter a valid 6-digit PIN code" }) pincode!: string;
   @IsOptional() @IsBoolean() isDefault?: boolean;
 }

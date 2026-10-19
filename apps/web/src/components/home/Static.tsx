@@ -3,7 +3,7 @@ import Link from "next/link";
 export function Hero({ brand }: { brand: string }) {
   return (
     <section className="grid gap-4 lg:grid-cols-3 lg:grid-rows-2">
-      <div className="relative overflow-hidden rounded-3xl bg-ink p-8 text-white sm:p-12 lg:col-span-2 lg:row-span-2">
+      <div data-chrome="panel" className="relative overflow-hidden rounded-3xl bg-ink p-8 text-white sm:p-12 lg:col-span-2 lg:row-span-2">
         <div className="grid-pattern absolute inset-0" />
         <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-brand-500/30 blur-3xl" />
         <div className="absolute -bottom-32 right-20 h-80 w-80 rounded-full bg-gold/20 blur-3xl" />
@@ -46,7 +46,7 @@ export function Hero({ brand }: { brand: string }) {
 
 export function HowItWorks({ brand }: { brand: string }) {
   return (
-    <section className="rounded-3xl bg-ink p-8 text-white sm:p-12">
+    <section data-chrome="panel" className="rounded-3xl bg-ink p-8 text-white sm:p-12">
       <h2 className="text-3xl font-bold">Two ways to shop, one clear experience</h2>
       <div className="mt-8 grid gap-6 md:grid-cols-2">
         <Step tone="brand" title={`Buying from ${brand}`} steps={[`Pick a ${brand} product`, "Add it to your cart", "Check out with us — we ship and support you"]} />

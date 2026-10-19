@@ -13,6 +13,7 @@ import { Alert, Badge, Card, Empty, PageHeader, Skeleton, StatCard, btn, inputCl
 import { DonutChart, HBars, TrendChart, type Series } from "@/components/admin/charts";
 import { Stars } from "@/components/Stars";
 import { useBrand } from "@/components/BrandProvider";
+import { Select } from "@/components/Select";
 
 interface Sales { granularity: Granularity; series: SalesPoint[]; totals: { orders: number; units: number; revenuePaise: number; profitPaise: number; discountPaise: number; shippingPaise: number } }
 interface Bucket { orders: number; valuePaise: number; oldest: string | null }
@@ -262,10 +263,10 @@ function OrderLog({ data, loading }: { data?: OrdersResp | null; loading: boolea
     <Card
       title="Order log" description="Every order in the selected dates with its exact date and time." className="mt-6" padded={false}
       actions={
-        <select value={status} onChange={(e) => { setStatus(e.target.value); setLimit(25); }} className={`${inputCls} !w-auto`} aria-label="Filter orders by status">
+        <Select value={status} onChange={(e) => { setStatus(e.target.value); setLimit(25); }} className={`${inputCls} !w-auto`} aria-label="Filter orders by status">
           <option value="">All statuses</option>
           {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-        </select>
+        </Select>
       }
     >
       {loading ? <Skeleton rows={3} /> : rows.length === 0 ? <Empty title="No orders in this period" /> : (
@@ -369,30 +370,30 @@ function Engagement({ range }: { range: { from: string; to: string } }) {
       <div className="space-y-3 border-b border-line p-4">
         <div className="flex flex-wrap gap-3">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by product name" className={`${inputCls} max-w-xs`} aria-label="Filter by product name" />
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by category">
+          <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by category">
             <option value="">All categories</option>
             {catOptions.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-          </select>
-          <select value={type} onChange={(e) => setType(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by type">
+          </Select>
+          <Select value={type} onChange={(e) => setType(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by type">
             <option value="">All types</option><option value="OWN">Sold by {brand}</option><option value="AFFILIATE">Affiliate</option>
-          </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
+          </Select>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
             <option value="">All statuses</option><option value="PUBLISHED">Published</option><option value="DRAFT">Draft</option>
-          </select>
+          </Select>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <select value={activity} onChange={(e) => setActivity(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by activity">
+          <Select value={activity} onChange={(e) => setActivity(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by activity">
             <option value="">Any activity</option>
             <option value="sold">Has sales</option>
             <option value="unsold">No sales yet</option>
             <option value="browse">Viewed but never bought</option>
             <option value="wishlist">Wishlisted</option>
             <option value="clicks">Has partner clicks</option>
-          </select>
-          <select value={rating} onChange={(e) => setRating(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by rating">
+          </Select>
+          <Select value={rating} onChange={(e) => setRating(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by rating">
             <option value="">Any rating</option>
             <option value="4">4 stars and up</option><option value="3">3 stars and up</option><option value="low">Under 3 stars</option><option value="none">No reviews</option>
-          </select>
+          </Select>
           <label className="flex items-center gap-2 text-xs font-medium text-muted">At least
             <input value={minViews} onChange={(e) => setMinViews(e.target.value)} type="number" min={0} placeholder="0" aria-label="Minimum views" className={`${inputCls} !w-20`} /> views
           </label>

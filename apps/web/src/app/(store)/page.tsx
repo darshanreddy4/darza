@@ -1,5 +1,5 @@
 import { api, type Category, type Product } from "@/lib/api";
-import type { AdsenseConfig, CategorySliderConfig, ProductSliderConfig, TileCarouselConfig, CategoriesConfig, FaqConfig, HomeWidget, ProductsConfig, PromoConfig, SpacerConfig, TextConfig, TilesConfig, TrustConfig } from "@/lib/home";
+import type { AdsenseConfig, BrandCardsConfig, IconGridConfig, ImageBannerConfig, OfferCardsConfig, CategorySliderConfig, ProductSliderConfig, TileCarouselConfig, CategoriesConfig, FaqConfig, HomeWidget, ProductsConfig, PromoConfig, SpacerConfig, TextConfig, TilesConfig, TrustConfig } from "@/lib/home";
 import { HeroBanners, type BannerData } from "@/components/HeroBanners";
 import { JsonLd } from "@/components/JsonLd";
 import { absoluteUrl } from "@/lib/seo";
@@ -8,6 +8,7 @@ import { contactLinks, getSite, getSiteUrl } from "@/lib/site-profile";
 import { imgSrc } from "@/lib/api";
 import { Hero, HowItWorks } from "@/components/home/Static";
 import { AdsenseSlot } from "@/components/home/AdsenseSlot";
+import { BrandCardsWidget, IconGridWidget, ImageBannerWidget, OfferCardsWidget } from "@/components/home/OfferWidgets";
 import { CategoriesWidget, CategorySliderWidget, ProductSliderWidget, TileCarouselWidget, FaqWidget, ProductsWidget, PromoWidget, SpacerWidget, TextWidget, TilesWidget, TrustWidget } from "@/components/home/Widgets";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,10 @@ function Widget({ widget: w, categories, banners, brand }: { widget: LiveWidget;
     case "promo-banner": return <PromoWidget config={w.config as unknown as PromoConfig} />;
     case "image-tiles": return <TilesWidget config={w.config as unknown as TilesConfig} />;
     case "tile-carousel": return <TileCarouselWidget config={w.config as unknown as TileCarouselConfig} />;
+    case "icon-grid": return <IconGridWidget config={w.config as unknown as IconGridConfig} />;
+    case "brand-cards": return <BrandCardsWidget config={w.config as unknown as BrandCardsConfig} />;
+    case "image-banner": return <ImageBannerWidget config={w.config as unknown as ImageBannerConfig} />;
+    case "offer-cards": return <OfferCardsWidget config={w.config as unknown as OfferCardsConfig} />;
     case "text": return <TextWidget config={w.config as unknown as TextConfig} />;
     case "faq": return <FaqWidget config={w.config as unknown as FaqConfig} />;
     case "how-it-works": return <HowItWorks brand={brand} />;

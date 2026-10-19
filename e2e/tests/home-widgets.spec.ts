@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
 import { asBrowser } from "./helpers";
@@ -39,7 +40,7 @@ test.describe.serial("home page builder", () => {
     await page.getByRole("button", { name: "+ Add widget" }).click();
     await page.getByRole("button", { name: /^Product collection/ }).click();
     await page.getByLabel("Heading", { exact: true }).fill("E2E hand-picked");
-    await page.getByLabel("Which products").selectOption("picks");
+    await pick(page.getByLabel("Which products"), "picks");
     await page.getByPlaceholder("Search published products by name…").fill("power bank");
     await page.getByRole("button", { name: /E2E Power Bank 10000mAh/ }).click();
 

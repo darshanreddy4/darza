@@ -2,12 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { slugify, useAdminApi, useAdminQuery, type AdminCategory, type AdminProduct } from "@/lib/admin";
+import { slugify, toIso, toLocalInput, useAdminApi, useAdminQuery, type AdminCategory, type AdminProduct } from "@/lib/admin";
 import { buildCategoryTree } from "@/lib/categories";
 import { Alert, Badge, Card, btn, inputCls } from "@/components/admin/ui";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 import { VideoLinks } from "@/components/admin/VideoLinks";
 import { useBrand } from "@/components/BrandProvider";
+import { Select } from "@/components/Select";
+import { msUntil } from "@/lib/labels";
+import { PACK_KINDS, PACK_UNITS, formatPack, parsePack, type PackKind } from "@/lib/packSize";
 
 type Row = { k: string; v: string };
 
@@ -49,8 +52,29 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const [showAddToCart, setShowAddToCart] = useState(initial?.showAddToCart ?? false);
   const [showDelivery, setShowDelivery] = useState(initial?.deliveryDays != null);
   const [deliveryDays, setDeliveryDays] = useState(initial?.deliveryDays == null ? "3" : String(initial.deliveryDays));
-  const [freeDelivery, setFreeDelivery] = useState(initial?.freeDelivery ?? false);
+  const [chargeMode, setChargeMode] = useState<"store" | "free" | "charge">(initial?.chargeDelivery ? "charge" : initial?.freeDelivery ? "free" : "store");
+  const [chargeFee, setChargeFee] = useState(toRupees(initial?.deliveryFeePaise));
   const [gstRate, setGstRate] = useState(String(initial?.gstRatePercent ?? 18));
+  const firstPack = parsePack(initial?.packSize);
+  const [packKind, setPackKind] = useState<PackKind>(firstPack.kind);
+  const [packAmount, setPackAmount] = useState(firstPack.amount);
+  const [packUnit, setPackUnit] = useState(firstPack.unit);
+  const [packCustom, setPackCustom] = useState(firstPack.custom);
+  const packSize = formatPack({ kind: packKind, amount: packAmount, unit: packUnit, custom: packCustom });
+  const [returnMode, setReturnMode] = useState<"default" | "none" | "days">(initial?.returnDays == null ? "default" : initial.returnDays === 0 ? "none" : "days");
+  const [returnDays, setReturnDays] = useState(String(initial?.returnDays || 7));
+  const [saleTag, setSaleTag] = useState(initial?.saleTag ?? "");
+  const [showSold, setShowSold] = useState(initial?.showSold ?? true);
+  const [multiBuy, setMultiBuy] = useState(initial?.multiBuyQty != null);
+  const [multiBuyQty, setMultiBuyQty] = useState(String(initial?.multiBuyQty ?? 2));
+  const [multiBuyPercent, setMultiBuyPercent] = useState(String(initial?.multiBuyPercent ?? 3));
+  const [saleOn, setSaleOn] = useState(initial?.salePricePaise != null);
+  const [salePrice, setSalePrice] = useState(toRupees(initial?.salePricePaise));
+  const [saleEndsAt, setSaleEndsAt] = useState(toLocalInput(initial?.saleEndsAt ?? null));
+  const [variantGroup, setVariantGroup] = useState(initial?.variantGroup ?? "");
+  const [colorName, setColorName] = useState(initial?.colorName ?? "");
+  const [warranty, setWarranty] = useState(initial?.warranty ?? "");
+  const [manufacturerInfo, setManufacturerInfo] = useState(initial?.manufacturerInfo ?? "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -65,6 +89,13 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
     const pricePaise = Math.round(Number(price) * 100);
     if (!Number.isFinite(pricePaise) || pricePaise < 0) return setError("Enter a valid price");
     if (!effectiveCategory) return setError("Create a category first");
+    if (own && chargeMode === "charge" && chargeFee && (!Number.isFinite(Number(chargeFee)) || Number(chargeFee) < 0)) return setError("Enter a valid delivery charge");
+    const sale = own && saleOn ? { salePricePaise: Math.round(Number(salePrice) * 100), saleEndsAt: toIso(saleEndsAt) } : null;
+    if (sale) {
+      if (!salePrice || !Number.isFinite(sale.salePricePaise) || sale.salePricePaise < 0) return setError("Enter the sale price");
+      if (sale.salePricePaise >= pricePaise) return setError("The sale price must be lower than the selling price");
+      if (!sale.saleEndsAt) return setError("Choose when the sale ends");
+    }
 
     const payload = {
       name: name.trim(), slug, description: description.trim(), brand: brand.trim() || undefined, categoryId: effectiveCategory,
@@ -75,11 +106,18 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
       images: images.map((u) => u.trim()).filter(Boolean).map((url) => ({ url })),
       videoUrls: videos,
       showRating, dealLabel: dealLabel.trim() || undefined, gstRatePercent: Number(gstRate),
+      packSize: packSize.trim() || undefined, saleTag: saleTag || undefined,
+      variantGroup: variantGroup.trim() || undefined, colorName: colorName.trim() || undefined,
+      warranty: warranty.trim() || undefined, manufacturerInfo: manufacturerInfo.trim() || undefined,
+      ...(sale ? { salePricePaise: sale.salePricePaise, saleEndsAt: sale.saleEndsAt ?? undefined } : {}),
       highlights: highlights.split("\n").map((h) => h.trim()).filter(Boolean),
       ...(own
         ? {
             sku: sku.trim(), stock: Number(stock || 0), costPaise: cost ? Math.round(Number(cost) * 100) : undefined,
-            showAddToCart, freeDelivery: showDelivery && freeDelivery, deliveryDays: showDelivery ? Math.max(0, Math.min(30, Math.round(Number(deliveryDays) || 0))) : undefined,
+            returnDays: returnMode === "none" ? 0 : returnMode === "days" ? Math.max(1, Math.min(90, Math.round(Number(returnDays) || 7))) : undefined,
+            showAddToCart, showSold, freeDelivery: chargeMode === "free", chargeDelivery: chargeMode === "charge", deliveryFeePaise: chargeMode === "charge" && chargeFee ? Math.round(Number(chargeFee) * 100) : undefined,
+            deliveryDays: showDelivery ? Math.max(0, Math.min(30, Math.round(Number(deliveryDays) || 0))) : undefined,
+            ...(multiBuy ? { multiBuyQty: Math.round(Number(multiBuyQty)), multiBuyPercent: Math.round(Number(multiBuyPercent)) } : {}),
           }
         : { platform, affiliateUrl: affiliateUrl.trim(), affiliateDisclosure: disclosure.trim() || undefined }),
     };
@@ -135,7 +173,7 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                 </label>
               </div>
               <label className={label}>Category
-                <select required value={effectiveCategory} onChange={(e) => setCategoryId(e.target.value)} className={`${inputCls} mt-1.5`}>
+                <Select required value={effectiveCategory} onChange={(e) => setCategoryId(e.target.value)} className={`${inputCls} mt-1.5`}>
                   {categories.length === 0 && <option value="">No categories — create one first</option>}
                   {tree.map((p) => p.children.length === 0 ? (
                     <option key={p.id} value={p.id}>{p.name}</option>
@@ -145,7 +183,7 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                       <option value={p.id}>{p.name} (general)</option>
                     </optgroup>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className={label}>Description
                 <textarea required value={description} onChange={(e) => setDescription(e.target.value)} rows={5} className={`${inputCls} mt-1.5`} />
@@ -167,13 +205,36 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                 <span className={hint}>Shown struck through to display the discount.</span>
               </label>
               <label className={label}>GST rate
-                <select value={gstRate} onChange={(e) => setGstRate(e.target.value)} className={`${inputCls} mt-1.5`}>
+                <Select value={gstRate} onChange={(e) => setGstRate(e.target.value)} className={`${inputCls} mt-1.5`}>
                   {[0, 5, 12, 18, 28].map((r) => <option key={r} value={r}>{r}%</option>)}
-                </select>
+                </Select>
                 <span className={hint}>Already included in the price. Used on invoices once GST is switched on in Settings.</span>
               </label>
             </div>
           </Card>
+
+          {own && (
+            <Card title="Timed sale" description="Optional. Customers see a countdown on the product page, and the price goes back to the selling price by itself when it ends.">
+              <div className="space-y-4 text-sm">
+                <label className="flex items-start gap-3">
+                  <input type="checkbox" checked={saleOn} onChange={(e) => setSaleOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                  <span><span className="font-medium">Run a timed sale on this product</span><br /><span className="text-xs text-muted">The sale price applies in the shop, the cart and checkout until the end time. The selling price above is the normal price.</span></span>
+                </label>
+                {saleOn && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className={label}>Sale price (₹)
+                      <input type="number" min="0" step="0.01" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} className={`${inputCls} mt-1.5`} />
+                      <span className={hint}>Must be lower than the selling price.</span>
+                    </label>
+                    <label className={label}>Sale ends
+                      <input type="datetime-local" value={saleEndsAt} onChange={(e) => setSaleEndsAt(e.target.value)} className={`${inputCls} mt-1.5`} />
+                      <span className={hint}>{saleEndsAt && msUntil(toIso(saleEndsAt)!) <= 0 ? "This time has passed, so the sale is over. Pick a new time to run it again." : "In your local time. The sale starts as soon as you save."}</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           {own ? (
             <Card title="Inventory & fulfilment">
@@ -185,7 +246,35 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                   <span className={hint}>Private. Used to calculate profit in Analytics; orders keep the cost at the time of sale.</span>
                 </label>
                 <label className={`${label} sm:col-span-2`}>Delivery information<input value={deliveryInfo} onChange={(e) => setDeliveryInfo(e.target.value)} placeholder="Delivered in 3–5 business days" className={`${inputCls} mt-1.5`} /></label>
-                <label className={`${label} sm:col-span-2`}>Return policy<input value={returnPolicy} onChange={(e) => setReturnPolicy(e.target.value)} placeholder="7-day replacement for defects" className={`${inputCls} mt-1.5`} /></label>
+                <label className={`${label} sm:col-span-2`}>Return policy text<input value={returnPolicy} onChange={(e) => setReturnPolicy(e.target.value)} placeholder="7-day replacement for defects" className={`${inputCls} mt-1.5`} /></label>
+                <div className="sm:col-span-2">
+                  <p className={label}>Delivery charge</p>
+                  <div className="mt-1.5 grid gap-3 sm:grid-cols-2">
+                    <Select aria-label="Delivery charge" value={chargeMode} onChange={(e) => setChargeMode(e.target.value as "store" | "free" | "charge")} className={inputCls}>
+                      <option value="store">Follow the store&apos;s delivery rules</option>
+                      <option value="free">Always free delivery</option>
+                      <option value="charge">Always charge delivery (heavy or bulky)</option>
+                    </Select>
+                    {chargeMode === "charge" && <input aria-label="Delivery charge (₹)" type="number" min={0} step="0.01" value={chargeFee} onChange={(e) => setChargeFee(e.target.value)} placeholder="Store fee" className={inputCls} />}
+                  </div>
+                  <p className={hint}>
+                    {chargeMode === "free" ? "Never adds to the delivery charge, and the product page says FREE delivery."
+                      : chargeMode === "charge" ? "The charge is added once per order for this product even when the order is large, until the whole order reaches the free-everything amount in Settings. Leave the amount empty to use the store's fee."
+                      : "Delivery is charged, or free for bigger orders, as set in Settings (and for the customer's area)."}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className={label}>Can customers return it?</p>
+                  <div className="mt-1.5 grid gap-3 sm:grid-cols-2">
+                    <Select aria-label="Returns" value={returnMode} onChange={(e) => setReturnMode(e.target.value as "default" | "none" | "days")} className={inputCls}>
+                      <option value="default">Yes, for the store&apos;s return period</option>
+                      <option value="days">Yes, for a number of days I choose</option>
+                      <option value="none">No returns on this product</option>
+                    </Select>
+                    {returnMode === "days" && <input aria-label="Return days" type="number" min={1} max={90} value={returnDays} onChange={(e) => setReturnDays(e.target.value)} placeholder="Days" className={inputCls} />}
+                  </div>
+                  <p className={hint}>{returnMode === "none" ? "Customers see \u201cNo returns\u201d before they buy. Once it is shipped, no return or refund request can be made for it, and orders keep the rule they were placed under." : "The product page shows the return days with a return icon. Orders keep the number of days they were placed under."}</p>
+                </div>
               </div>
             </Card>
           ) : (
@@ -193,9 +282,9 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className={label}>Destination platform
-                    <select value={PLATFORMS.includes(platform) ? platform : "Other"} onChange={(e) => setPlatform(e.target.value === "Other" ? "" : e.target.value)} className={`${inputCls} mt-1.5`}>
+                    <Select value={PLATFORMS.includes(platform) ? platform : "Other"} onChange={(e) => setPlatform(e.target.value === "Other" ? "" : e.target.value)} className={`${inputCls} mt-1.5`}>
                       {PLATFORMS.map((p) => <option key={p}>{p}</option>)}
-                    </select>
+                    </Select>
                   </label>
                   {!PLATFORMS.slice(0, -1).includes(platform) && (
                     <label className={label}>Platform name<input required value={platform} onChange={(e) => setPlatform(e.target.value)} className={`${inputCls} mt-1.5`} /></label>
@@ -222,6 +311,33 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                 <input value={dealLabel} maxLength={40} onChange={(e) => setDealLabel(e.target.value)} placeholder="Mega Festival Deal" className={`${inputCls} mt-1.5`} />
                 <span className={hint}>A red tag above the price, e.g. a festival or limited-time offer. Clear it when the offer ends.</span>
               </label>
+              <fieldset className="space-y-2">
+                <legend className={label}>Pack size <span className="font-normal text-muted">optional</span></legend>
+                <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr]">
+                  <Select aria-label="Measured in" value={packKind} onChange={(e) => setPackKind(e.target.value as PackKind)} className={inputCls}>
+                    {PACK_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+                  </Select>
+                  {packKind === "custom" && <input aria-label="Pack size text" value={packCustom} maxLength={60} onChange={(e) => setPackCustom(e.target.value)} placeholder="600 ml, 800 ml, 1100 ml" className={`${inputCls} sm:col-span-2`} />}
+                  {(packKind === "pieces" || packKind === "volume" || packKind === "weight") && (
+                    <input aria-label="Pack amount" type="number" min="0" step="any" value={packAmount} onChange={(e) => setPackAmount(e.target.value)} className={inputCls} />
+                  )}
+                  {(packKind === "volume" || packKind === "weight") && (
+                    <Select aria-label="Unit" value={packUnit} onChange={(e) => setPackUnit(e.target.value)} className={inputCls}>
+                      {PACK_UNITS[packKind].map((u) => <option key={u} value={u}>{u}</option>)}
+                    </Select>
+                  )}
+                  {packKind === "pieces" && <p className="self-center text-sm text-muted">piece{Number(packAmount) === 1 ? "" : "s"}</p>}
+                </div>
+                <p className={hint}>{packSize ? <>Shown under the name as <strong className="text-ink">{packSize}</strong>. </> : null}Pick what suits the product: a count for gadgets and electricals (1 piece), ml or litres for shampoo and drinks, grams or kilograms for groceries.</p>
+              </fieldset>
+              <label className={label}>Sale tag <span className="font-normal text-muted">optional</span>
+                <Select value={saleTag} onChange={(e) => setSaleTag(e.target.value)} className={`${inputCls} mt-1.5`}>
+                  <option value="">None</option>
+                  <option value="TOP_DISCOUNT">Top Discount of the Sale</option>
+                  <option value="LOWEST_PRICE">Lowest price in the year</option>
+                </Select>
+                <span className={hint}>Only use a tag that is true today. Remove it when the sale ends or the price goes up.</span>
+              </label>
               {own ? (
                 <>
                   <div className="space-y-3">
@@ -234,10 +350,27 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                         <label className={label}>Delivered within (days)
                           <input type="number" min={0} max={30} value={deliveryDays} onChange={(e) => setDeliveryDays(e.target.value)} className={`${inputCls} mt-1.5 !w-28`} />
                         </label>
-                        <label className="flex items-center gap-3">
-                          <input type="checkbox" checked={freeDelivery} onChange={(e) => setFreeDelivery(e.target.checked)} className="h-4 w-4 accent-emerald-600" />
-                          <span>Say “FREE delivery” (only if you really don&apos;t charge for it)</span>
+                      </div>
+                    )}
+                  </div>
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" checked={showSold} onChange={(e) => setShowSold(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                    <span><span className="font-medium">Show how many were bought</span><br /><span className="text-xs text-muted">Counted from real orders (not cancelled or refunded), so it appears once someone has bought it. Shown as, for example, “1.2K+ bought”. “Only few left” shows by itself when stock is at or below the low-stock level in Settings.</span></span>
+                  </label>
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-3">
+                      <input type="checkbox" checked={multiBuy} onChange={(e) => setMultiBuy(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                      <span><span className="font-medium">Multi-buy offer</span><br /><span className="text-xs text-muted">A real extra saving in the cart and at checkout when a customer buys enough of this product.</span></span>
+                    </label>
+                    {multiBuy && (
+                      <div className="ml-7 flex flex-wrap items-end gap-3">
+                        <label className={label}>Buy at least
+                          <input type="number" min={2} max={10} value={multiBuyQty} onChange={(e) => setMultiBuyQty(e.target.value)} className={`${inputCls} mt-1.5 !w-24`} />
                         </label>
+                        <label className={label}>Save extra (%)
+                          <input type="number" min={1} max={50} value={multiBuyPercent} onChange={(e) => setMultiBuyPercent(e.target.value)} className={`${inputCls} mt-1.5 !w-24`} />
+                        </label>
+                        <p className="pb-2 text-xs text-muted">Shown as “Buy {multiBuyQty || "…"} items, save extra {multiBuyPercent || "…"}%”.</p>
                       </div>
                     )}
                   </div>
@@ -249,6 +382,30 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
               ) : (
                 <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">Delivery dates and the cart button are only for products {storeName} sells. Partner products are bought and delivered on {platform || "the partner site"}.</p>
               )}
+            </div>
+          </Card>
+
+          <Card title="Colour and size options" description="Optional. Give products of the same item (different colours or sizes) the same group name and they show as options of each other on the product page.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className={label}>Group name
+                <input value={variantGroup} maxLength={80} onChange={(e) => setVariantGroup(e.target.value)} placeholder="cello-sapphire-casserole" className={`${inputCls} mt-1.5 font-mono`} />
+                <span className={hint}>Letters, numbers, spaces and dashes. Use the same name on each colour or size of this item.</span>
+              </label>
+              <label className={label}>Colour
+                <input value={colorName} maxLength={40} onChange={(e) => setColorName(e.target.value)} placeholder="Blue" className={`${inputCls} mt-1.5`} />
+                <span className={hint}>The size comes from the Pack size above, so each product in the group needs its own colour and pack size.</span>
+              </label>
+            </div>
+          </Card>
+
+          <Card title="Warranty and manufacturer" description="Optional, shown on the product page. Packaged goods usually need the manufacturer or packer and the country of origin.">
+            <div className="space-y-4">
+              <label className={label}>Warranty
+                <input value={warranty} maxLength={200} onChange={(e) => setWarranty(e.target.value)} placeholder="1 year manufacturer warranty" className={`${inputCls} mt-1.5`} />
+              </label>
+              <label className={label}>Manufacturer, packer and country of origin
+                <textarea value={manufacturerInfo} maxLength={1000} rows={3} onChange={(e) => setManufacturerInfo(e.target.value)} placeholder={"Country of origin: India\nManufactured by: Name, address"} className={`${inputCls} mt-1.5`} />
+              </label>
             </div>
           </Card>
 

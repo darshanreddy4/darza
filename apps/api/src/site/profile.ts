@@ -1,3 +1,5 @@
+import { DEFAULT_LOGO_DESIGN, sanitizeLogoDesign, type LogoDesign } from "./logo-design";
+
 // What an admin may save as the store's brand, contact and social details, and how it is cleaned.
 
 export const SOCIAL_PLATFORMS = ["instagram", "facebook", "x", "youtube", "linkedin", "pinterest", "telegram", "threads", "snapchat"] as const;
@@ -22,7 +24,16 @@ export interface SiteProfileData {
   siteUrl: string;
   logoUrl: string;
   logoOnBadge: boolean;
+  logoDesign: LogoDesign;
   tagline: string;
+  legalName: string;
+  gstin: string;
+  grievanceOfficer: string;
+  grievanceEmail: string;
+  announcement: string;
+  announcementOn: boolean;
+  transparencyNote: string;
+  transparencyOn: boolean;
   about: string;
   email: string;
   phone: string;
@@ -37,7 +48,8 @@ export interface SiteProfileData {
 }
 
 export const EMPTY_PROFILE: SiteProfileData = {
-  brandName: "", siteUrl: "", logoUrl: "", logoOnBadge: false, tagline: "", about: "", email: "", phone: "", address: "",
+  brandName: "", siteUrl: "", logoUrl: "", logoOnBadge: false, logoDesign: DEFAULT_LOGO_DESIGN, tagline: "", legalName: "", gstin: "", grievanceOfficer: "", grievanceEmail: "",
+  announcement: "", announcementOn: true, transparencyNote: "", transparencyOn: true, about: "", email: "", phone: "", address: "",
   careHours: "", careNote: "", whatsapp: "", whatsappMessage: "", whatsappButton: false, socials: {}, otherLinks: [],
 };
 
@@ -45,6 +57,7 @@ const IMAGE = /^(https:\/\/\S+|\/uploads\/[A-Za-z0-9._-]+)$/;
 const HTTPS = /^https:\/\/[^\s/$.?#][^\s]*$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE = /^\+?[0-9 ()-]{6,20}$/;
+const GSTIN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const HANDLE = /^@?[A-Za-z0-9._-]{1,60}$/;
 
 const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -58,6 +71,9 @@ export function sanitizeProfile(input: unknown): { profile: SiteProfileData } | 
 
   const logoUrl = text(c.logoUrl, 2000);
   if (logoUrl && !IMAGE.test(logoUrl)) errors.push("The logo must be an uploaded image or an https:// address");
+
+  const design = sanitizeLogoDesign(c.logoDesign);
+  if ("errors" in design) errors.push(...design.errors);
 
   // The website's address: https (or plain http for local testing), reduced to scheme and host.
   let siteUrl = "";
@@ -75,6 +91,12 @@ export function sanitizeProfile(input: unknown): { profile: SiteProfileData } | 
 
   const email = text(c.email, 120);
   if (email && !EMAIL.test(email)) errors.push("The email address does not look right");
+
+  const gstin = text(c.gstin, 15).toUpperCase();
+  if (gstin && !GSTIN.test(gstin)) errors.push("The GSTIN should be 15 characters, for example 29ABCDE1234F1Z5");
+
+  const grievanceEmail = text(c.grievanceEmail, 120);
+  if (grievanceEmail && !EMAIL.test(grievanceEmail)) errors.push("The grievance email address does not look right");
 
   const phone = text(c.phone, 30);
   if (phone && !PHONE.test(phone)) errors.push("The phone number should only have digits, spaces, + ( ) and -");
@@ -107,8 +129,11 @@ export function sanitizeProfile(input: unknown): { profile: SiteProfileData } | 
   if (errors.length) return { errors };
   return {
     profile: {
-      brandName: text(c.brandName, 40), siteUrl, logoUrl, logoOnBadge: c.logoOnBadge === true,
+      brandName: text(c.brandName, 40), siteUrl, logoUrl, logoOnBadge: c.logoOnBadge === true, logoDesign: (design as { design: LogoDesign }).design,
       tagline: text(c.tagline, 200), about: text(c.about, 4000),
+      legalName: text(c.legalName, 120), gstin, grievanceOfficer: text(c.grievanceOfficer, 120), grievanceEmail,
+      announcement: text(c.announcement, 200), announcementOn: c.announcementOn !== false,
+      transparencyNote: text(c.transparencyNote, 600), transparencyOn: c.transparencyOn !== false,
       email, phone, address: text(c.address, 300),
       careHours: text(c.careHours, 120), careNote: text(c.careNote, 300),
       whatsapp, whatsappMessage: text(c.whatsappMessage, 200), whatsappButton: c.whatsappButton === true && whatsapp !== "",

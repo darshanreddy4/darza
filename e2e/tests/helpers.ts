@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Browser } from "@playwright/test";
+import { expect, type APIRequestContext, type Browser, type Locator } from "@playwright/test";
 import { API, WEB } from "./data";
 
 // Requests made with a saved admin session. The origin header is what a browser would send.
@@ -52,4 +52,24 @@ export async function knownLinkToken(type: "EMAIL_ADD" | "EMAIL_VERIFY" | "PASSW
     : db.$executeRawUnsafe(`UPDATE "AuthToken" SET "tokenHash" = $1 WHERE type = '${type}'::"AuthTokenType" AND "usedAt" IS NULL`, hash));
   expect(changed, "an unused link was issued").toBeGreaterThan(0);
   return raw;
+}
+
+// Opens a dropdown, checks which options it offers, and closes it again.
+export async function expectOptions(trigger: Locator, expected: { present?: (string | RegExp)[]; absent?: (string | RegExp)[] }) {
+  await trigger.click();
+  const page = trigger.page();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  for (const name of expected.present ?? []) await expect(page.getByRole("option", { name })).toBeVisible();
+  for (const name of expected.absent ?? []) await expect(page.getByRole("option", { name })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+}
+
+// Chooses an option in one of the site's dropdowns: by its value, or by its visible text with { label }.
+export async function pick(trigger: Locator, choice: string | { label: string | RegExp }) {
+  await trigger.click();
+  const page = trigger.page();
+  const option = typeof choice === "string"
+    ? page.locator(`[role="option"][data-value="${choice}"]`)
+    : page.getByRole("option", { name: choice.label, exact: typeof choice.label === "string" });
+  await option.click();
 }

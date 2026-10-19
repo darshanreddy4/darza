@@ -63,8 +63,8 @@ Each product page is also prepared for search engines (title, description, struc
 
 - The cart is kept **in the browser**, so it works without an account and survives closing the tab.
 - The shopper changes quantities (up to 99 of a line), removes items, and sees the subtotal.
-- **Coupon box:** enter a code to see the discount. Codes meant for this customer (personal codes) are listed in My account and can be tapped to apply.
-- **Delivery fee** is shown live: a flat fee, free above a set amount, always free, or never free (the owner decides in Settings). Default: ₹49, free above ₹499.
+- **Coupon box:** enter a code to see the discount. Codes meant for this customer (private codes) are listed in My account and can be tapped to apply. Codes the customer can use are listed by default under "Offers for you" with a one-tap Use code button; a code whose minimum order is not reached yet shows as locked with how much more to spend, and it also appears on the progress bar at the amount that unlocks it. Codes already used by that customer (by account, email or mobile number) are no longer listed. The coupon lowers the price paid but never removes free delivery the cart had earned. A code that has already been used with the customer's email address or mobile number is refused with a clear message.
+- **Delivery fee** is shown live: a flat fee, free above a set amount, always free, or never free (the owner decides in Settings). Default: ₹49, free above ₹499. Heavy products and some areas (by PIN code) can have their own delivery charge, big orders can ship free on everything, and a progress line at the top of the cart and checkout shows what is left to spend for free delivery and gifts.
 - **Tax:** when the store charges GST the amounts shown include the right treatment; the invoice shows the details.
 - Signed-in customers who leave a cart behind may receive one reminder email an hour or more later (they can switch these off in My account or with the link in the email).
 

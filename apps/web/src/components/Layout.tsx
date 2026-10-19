@@ -5,8 +5,11 @@ import { CartLink } from "./CartLink";
 import { AuthNav } from "./AuthNav";
 import { WishlistLink } from "./WishlistLink";
 import { Logo } from "./Logo";
-import { LEGAL_LINKS } from "./LegalPage";
+import { InlineRichText, fillPlaceholders } from "./Markdown";
+import { getLegalLinks } from "@/lib/pages";
+import { DEFAULT_ANNOUNCEMENT, DEFAULT_TRANSPARENCY } from "@/lib/policy-defaults";
 import { SearchBox } from "./SearchBox";
+import { CurrencySwitcher } from "./CurrencySwitcher";
 import { SocialIcon } from "./SocialIcons";
 import { DEFAULT_BRAND, getSite, contactLinks, whatsappUrl } from "@/lib/site-profile";
 import { getBusiness } from "@/lib/business";
@@ -18,14 +21,14 @@ export async function Header() {
 
   return (
     <header className="sticky top-0 z-40">
-      <div className="bg-ink-3 text-center text-xs text-white/80">
-        <p className="mx-auto max-w-7xl px-4 py-1.5">
-          Partner links are always clearly marked — you&apos;ll know exactly where you&apos;re buying.
-        </p>
-      </div>
-      <div className="bg-ink">
+      {site.announcementOn && (
+        <div data-chrome="top" className="bg-ink-3 text-center text-xs text-white/80">
+          <p className="mx-auto max-w-7xl px-4 py-1.5">{fillPlaceholders(site.announcement || DEFAULT_ANNOUNCEMENT, { brand })}</p>
+        </div>
+      )}
+      <div data-chrome="bar" className="bg-ink">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:gap-x-6 sm:px-6 md:flex-nowrap">
-          <Link href="/" aria-label={`${brand} home`}><Logo logoUrl={site.logoUrl} name={brand} onBadge={site.logoOnBadge} /></Link>
+          <Link href="/" aria-label={`${brand} home`}><Logo logoUrl={site.logoUrl} name={brand} onBadge={site.logoOnBadge} design={site.logoDesign} /></Link>
 
           {/* On a phone the search bar gets its own full-width row under the logo and buttons. */}
           <div className="order-last flex min-w-full md:order-none md:min-w-0 md:flex-1">
@@ -33,6 +36,7 @@ export async function Header() {
           </div>
 
           <nav className="ml-auto flex items-center gap-1 sm:gap-2 md:ml-0">
+            <CurrencySwitcher />
             <WishlistLink />
             <CartLink />
             <AuthNav />
@@ -85,7 +89,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 }
 
 export async function Footer() {
-  const [site, biz] = await Promise.all([getSite(), getBusiness()]);
+  const [site, biz, legalLinks] = await Promise.all([getSite(), getBusiness(), getLegalLinks()]);
   const name = biz.name;
   const links = contactLinks(site, biz.email);
   const social = links.filter((l) => l.key !== "email" && l.key !== "whatsapp");
@@ -93,10 +97,10 @@ export async function Footer() {
   const wa = whatsappUrl(site);
 
   return (
-    <footer className="mt-20 bg-ink text-white/70">
+    <footer data-chrome="footer" className="mt-20 bg-ink text-white/70">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.3fr_1.2fr]">
         <div className="space-y-4">
-          <Logo logoUrl={site.logoUrl} name={name} onBadge={site.logoOnBadge} />
+          <Logo logoUrl={site.logoUrl} name={name} onBadge={site.logoOnBadge} design={site.logoDesign} />
           <p className="max-w-sm text-sm leading-relaxed">
             {site.tagline || `A curated shopping destination. Buy ${name} products directly, or discover selected products and complete the purchase on trusted partner marketplaces.`}
           </p>
@@ -128,7 +132,7 @@ export async function Footer() {
           <h2 className="mb-4 text-sm font-semibold text-white">Company</h2>
           <ul className="space-y-2.5 text-sm">
             <li><Link href="/about" className="hover:text-white">About us</Link></li>
-            {LEGAL_LINKS.map((l) => <li key={l.href}><Link href={l.href} className="hover:text-white">{l.label}</Link></li>)}
+            {legalLinks.map((l) => <li key={l.href}><Link href={l.href} className="hover:text-white">{l.label}</Link></li>)}
           </ul>
         </div>
         <div>
@@ -146,12 +150,14 @@ export async function Footer() {
             <p className="text-sm"><Link href="/contact" className="hover:text-white">Contact &amp; grievance</Link></p>
           )}
         </div>
-        <div>
-          <h2 className="mb-4 text-sm font-semibold text-white">Transparency</h2>
-          <p className="rounded-xl border border-white/10 bg-white/5 p-4 text-xs leading-relaxed">
-            <strong className="text-white">Affiliate disclosure:</strong> some products on {name} contain affiliate links. If you buy through them, {name} may earn a commission at no additional cost to you.
-          </p>
-        </div>
+        {site.transparencyOn && (
+          <div>
+            <h2 className="mb-4 text-sm font-semibold text-white">Transparency</h2>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-xs leading-relaxed">
+              <InlineRichText source={fillPlaceholders(site.transparencyNote || DEFAULT_TRANSPARENCY, { brand: name })} />
+            </div>
+          </div>
+        )}
       </div>
       <div className="border-t border-white/10">
         <p className="mx-auto max-w-7xl px-4 py-5 text-xs sm:px-6">© {new Date().getFullYear()} {name}. All rights reserved.</p>

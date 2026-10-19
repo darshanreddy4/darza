@@ -1,7 +1,7 @@
 import { ProductStatus, ProductType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
-  ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsObject, IsOptional, IsString, IsUrl, Matches, Max, MaxLength, Min, MinLength, ValidateNested,
+  ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsObject, IsOptional, IsString, IsUrl, Matches, Max, MaxLength, Min, MinLength, ValidateNested,
 } from "class-validator";
 
 export class ProductImageDto {
@@ -32,7 +32,22 @@ export class ProductDto {
   @IsOptional() @IsString() @MaxLength(40) dealLabel?: string;
   @IsOptional() @IsInt() @Min(0) @Max(30) deliveryDays?: number;
   @IsOptional() @IsBoolean() freeDelivery?: boolean;
+  // Heavy or bulky: always pays delivery, deliveryFeePaise (or the store fee when left out) per order.
+  @IsOptional() @IsBoolean() chargeDelivery?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000) deliveryFeePaise?: number;
   @IsOptional() @IsBoolean() showAddToCart?: boolean;
+  @IsOptional() @IsString() @MaxLength(60) packSize?: string;
+  @IsOptional() @IsIn(["TOP_DISCOUNT", "LOWEST_PRICE"]) saleTag?: string;
+  @IsOptional() @IsBoolean() showSold?: boolean;
+  @IsOptional() @IsInt() @Min(2) @Max(10) multiBuyQty?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(50) multiBuyPercent?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) salePricePaise?: number;
+  @IsOptional() @IsDateString() saleEndsAt?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(90) returnDays?: number;
+  @IsOptional() @IsString() @MaxLength(80) @Matches(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/) variantGroup?: string;
+  @IsOptional() @IsString() @MaxLength(40) colorName?: string;
+  @IsOptional() @IsString() @MaxLength(200) warranty?: string;
+  @IsOptional() @IsString() @MaxLength(1000) manufacturerInfo?: string;
   @IsOptional() @IsInt() @IsIn([0, 5, 12, 18, 28]) gstRatePercent?: number;
 
   @IsOptional() @IsString() @MaxLength(64) sku?: string;

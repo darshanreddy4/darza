@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { API_URL, formatDeliveryDate, formatPrice, imgSized, type Product } from "@/lib/api";
+import { API_URL, formatDeliveryDate, imgSized, type Product } from "@/lib/api";
+import { Money } from "@/lib/currency";
 import { MAX_COMPARE, useCompare } from "@/lib/compare";
 import { AddToCartButton } from "./AddToCartButton";
 import { discountPercent, ImageFallback, SellerBadge } from "./ProductCard";
@@ -42,8 +43,8 @@ export function CompareView() {
         values: items.map((p) => String(p.pricePaise)),
         cells: items.map((p) => (
           <span key={p.id}>
-            <strong className={`font-display text-lg ${p.pricePaise === cheapest && items.length > 1 ? "text-brand-700" : ""}`}>{formatPrice(p.pricePaise)}</strong>
-            {discountPercent(p) > 0 && <span className="ml-2 text-xs text-muted line-through">{formatPrice(p.mrpPaise!)}</span>}
+            <strong className={`font-display text-lg ${p.pricePaise === cheapest && items.length > 1 ? "text-brand-700" : ""}`}><Money paise={p.pricePaise} /></strong>
+            {discountPercent(p) > 0 && <span className="ml-2 text-xs text-muted line-through"><Money paise={p.mrpPaise!} /></span>}
             {p.pricePaise === cheapest && items.length > 1 && <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">Lowest</span>}
           </span>
         )),

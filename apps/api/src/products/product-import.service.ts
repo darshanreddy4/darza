@@ -27,8 +27,9 @@ function toDto(p: ProductWithImages): Record<string, unknown> {
   return {
     name: p.name, slug: p.slug, description: p.description, brand: p.brand ?? undefined, specifications: p.specifications, categoryId: p.categoryId, productType: p.productType,
     status: p.status, featured: p.featured, pricePaise: p.pricePaise, mrpPaise: p.mrpPaise ?? undefined, sellerName: p.sellerName, deliveryInfo: p.deliveryInfo ?? undefined,
-    returnPolicy: p.returnPolicy ?? undefined, showRating: p.showRating, dealLabel: p.dealLabel ?? undefined, deliveryDays: p.deliveryDays ?? undefined, freeDelivery: p.freeDelivery,
-    showAddToCart: p.showAddToCart, gstRatePercent: p.gstRatePercent, sku: p.sku ?? undefined, stock: p.stock ?? undefined, costPaise: p.costPaise ?? undefined,
+    returnPolicy: p.returnPolicy ?? undefined, showRating: p.showRating, dealLabel: p.dealLabel ?? undefined, deliveryDays: p.deliveryDays ?? undefined, freeDelivery: p.freeDelivery, chargeDelivery: p.chargeDelivery, deliveryFeePaise: p.deliveryFeePaise ?? undefined,
+    showAddToCart: p.showAddToCart, packSize: p.packSize ?? undefined, salePricePaise: p.salePricePaise ?? undefined, returnDays: p.returnDays ?? undefined, saleEndsAt: p.saleEndsAt?.toISOString(), variantGroup: p.variantGroup ?? undefined, colorName: p.colorName ?? undefined, warranty: p.warranty ?? undefined, manufacturerInfo: p.manufacturerInfo ?? undefined, saleTag: p.saleTag ?? undefined, showSold: p.showSold, multiBuyQty: p.multiBuyQty ?? undefined, multiBuyPercent: p.multiBuyPercent ?? undefined,
+    gstRatePercent: p.gstRatePercent, sku: p.sku ?? undefined, stock: p.stock ?? undefined, costPaise: p.costPaise ?? undefined,
     platform: p.platform ?? undefined, affiliateUrl: p.affiliateUrl ?? undefined, affiliateDisclosure: p.affiliateDisclosure ?? undefined,
     images: p.images.map((i) => ({ url: i.url, alt: i.alt ?? undefined })), videoUrls: p.videoUrls, highlights: p.highlights,
   };

@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
 import { asBrowser } from "./helpers";
@@ -113,12 +114,12 @@ test.describe.serial("product and category sliders", () => {
     await page.goto("/admin/home");
     await page.getByRole("button", { name: "+ Add widget" }).click();
     await page.getByRole("button", { name: /^Product slider/ }).click();
-    await expect(page.getByLabel(/^Products visible at once/)).toHaveValue("4");
-    await page.getByLabel(/^Products visible at once/).selectOption("3");
+    await expect(page.getByLabel(/^Products visible at once/)).toContainText("4");
+    await pick(page.getByLabel(/^Products visible at once/), "3");
 
     await page.getByRole("button", { name: "+ Add widget" }).click();
     await page.getByRole("button", { name: /^Category slider/ }).click();
-    await page.getByLabel(/^Which categories/).selectOption("all");
+    await pick(page.getByLabel(/^Which categories/), "all");
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByText("Saved. Your home page is updated.")).toBeVisible();
     await expect(page.getByText(/Best sellers.*3 at a time/)).toBeVisible();

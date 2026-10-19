@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { API_URL } from "@/lib/api";
 import { IN_STATES } from "@/lib/states";
 import type { SavedAddress } from "@/lib/address";
+import { PincodeField } from "@/components/PincodeField";
+import { Select } from "@/components/Select";
 
 const field = "w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15";
 
@@ -87,14 +89,14 @@ export function SavedAddresses() {
             <input name="label" maxLength={30} defaultValue={current?.label ?? ""} placeholder="Label, e.g. Home (optional)" className={field} />
             <input name="name" required defaultValue={current?.name ?? ""} placeholder="Full name" autoComplete="name" className={field} />
             <input name="phone" required pattern="[6-9][0-9]{9}" inputMode="numeric" defaultValue={current?.phone ?? ""} placeholder="10-digit mobile number" className={field} />
-            <input name="pincode" required pattern="[0-9]{6}" inputMode="numeric" defaultValue={current?.pincode ?? ""} placeholder="Pincode" className={field} />
+            <PincodeField defaultValue={current?.pincode ?? ""} className={field} />
             <input name="line1" required minLength={3} defaultValue={current?.line1 ?? ""} placeholder="Address line 1" className={`${field} sm:col-span-2`} />
             <input name="line2" defaultValue={current?.line2 ?? ""} placeholder="Address line 2 (optional)" className={`${field} sm:col-span-2`} />
             <input name="city" required defaultValue={current?.city ?? ""} placeholder="City" className={field} />
-            <select name="state" required defaultValue={current?.state ?? ""} aria-label="State" className={field}>
+            <Select name="state" required defaultValue={current?.state ?? ""} aria-label="State" className={field}>
               <option value="" disabled>Select state</option>
               {IN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            </Select>
           </div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isDefault" defaultChecked={current?.isDefault ?? false} className="h-4 w-4 accent-emerald-600" /> Use as my default address</label>
           {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

@@ -17,17 +17,40 @@ export function returnDeadline(order: { status: string; deliveredAt: Date | null
 
 export type ReturnCheck = { ok: true } | { ok: false; reason: string };
 
-export interface ReturnLine { quantity: number; returnedQty: number; pendingQty: number }
+// `returnDays` is the window the item was sold with (0 means no returns); older orders have none and use the store's window.
+export interface ReturnLine { quantity: number; returnedQty: number; pendingQty: number; returnDays?: number | null }
 
 // Units of an order line that can still be put in a new request.
 export const returnableQty = (l: ReturnLine) => Math.max(0, l.quantity - l.returnedQty - l.pendingQty);
 
-export function canRequestReturn(order: { status: string; deliveredAt: Date | null }, windowDays: number, lines: ReturnLine[], now = new Date()): ReturnCheck {
-  if (windowDays <= 0) return { ok: false, reason: "This store is not accepting return requests right now." };
+export const lineWindow = (l: Pick<ReturnLine, "returnDays">, storeDays: number) => l.returnDays ?? storeDays;
+
+type Delivered = { status: string; deliveredAt: Date | null };
+
+// Units of a line that can go in a new request right now: the item allows returns, its own window is still open and some units are left.
+export function eligibleQty(order: Delivered, l: ReturnLine, storeDays: number, now = new Date()): number {
+  const window = lineWindow(l, storeDays);
+  const deadline = returnDeadline(order, window);
+  return window > 0 && deadline !== null && deadline.getTime() >= now.getTime() ? returnableQty(l) : 0;
+}
+
+// The last day any item of the order can still be returned, or null.
+export function orderReturnDeadline(order: Delivered, lines: ReturnLine[], storeDays: number, now = new Date()): Date | null {
+  const dates = lines.filter((l) => eligibleQty(order, l, storeDays, now) > 0).map((l) => returnDeadline(order, lineWindow(l, storeDays))!);
+  return dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : null;
+}
+
+export function canRequestReturn(order: Delivered, windowDays: number, lines: ReturnLine[], now = new Date()): ReturnCheck {
+  const windows = lines.map((l) => lineWindow(l, windowDays));
+  if (windows.every((w) => w <= 0)) {
+    return { ok: false, reason: lines.every((l) => l.returnDays == null) ? "This store is not accepting return requests right now." : "The items in this order cannot be returned." };
+  }
   if (order.status !== "DELIVERED") return { ok: false, reason: "Returns can only be requested after an order has been delivered." };
-  if (!lines.some((l) => returnableQty(l) > 0)) return { ok: false, reason: "Every item in this order has already been returned or is being returned." };
-  const deadline = returnDeadline(order, windowDays);
-  if (!deadline || deadline.getTime() < now.getTime()) return { ok: false, reason: `The ${windowDays}-day return window for this order has ended.` };
+  const open = lines.filter((l) => lineWindow(l, windowDays) > 0 && returnableQty(l) > 0);
+  if (open.length === 0) return { ok: false, reason: "Every item in this order that can be returned has already been returned or is being returned." };
+  if (!open.some((l) => eligibleQty(order, l, windowDays, now) > 0)) {
+    return { ok: false, reason: `The ${Math.max(...open.map((l) => lineWindow(l, windowDays)))}-day return window for this order has ended.` };
+  }
   return { ok: true };
 }
 

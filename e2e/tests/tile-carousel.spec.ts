@@ -1,3 +1,4 @@
+import { pick } from "./helpers";
 import { expect, test } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
 import { asBrowser } from "./helpers";
@@ -55,8 +56,8 @@ test.describe.serial("image tile slider", () => {
     await page.goto("/admin/home");
     await page.getByRole("button", { name: "+ Add widget" }).click();
     await page.getByRole("button", { name: /^Image tile slider/ }).click();
-    await expect(page.getByLabel(/^Tiles visible at once/)).toHaveValue("4");
-    await page.getByLabel(/^Tiles visible at once/).selectOption("3");
+    await expect(page.getByLabel(/^Tiles visible at once/)).toContainText("4");
+    await pick(page.getByLabel(/^Tiles visible at once/), "3");
     await page.getByRole("button", { name: "+ Add a tile" }).click();
     await page.getByPlaceholder("or paste an https:// image address").fill("https://example.com/a.png");
     await page.getByRole("button", { name: "Save changes" }).click();

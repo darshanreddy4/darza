@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
-import { API_URL, formatPrice, imgSized } from "@/lib/api";
+import { API_URL, imgSized } from "@/lib/api";
+import { Money } from "@/lib/currency";
+import { Dropdown } from "./Dropdown";
 
 interface Suggestion { name: string; slug: string; image: string | null; pricePaise: number; category: string }
 interface Group { id: string; name: string; slug: string; children: { id: string; name: string; slug: string }[] }
@@ -12,6 +14,7 @@ export function SearchBox({ categories }: { categories: Group[] }) {
   const listId = useId();
   const wrapper = useRef<HTMLFormElement>(null);
   const [q, setQ] = useState("");
+  const [category, setCategory] = useState("");
   const [result, setResult] = useState<{ q: string; items: Suggestion[] } | null>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -55,15 +58,15 @@ export function SearchBox({ categories }: { categories: Group[] }) {
 
   return (
     <form ref={wrapper} action="/products" role="search" onBlur={onBlur} className="relative flex min-w-0 flex-1 rounded-xl bg-white ring-2 ring-transparent focus-within:ring-brand-500">
-      <select name="category" aria-label="Category" defaultValue="" className="hidden max-w-40 rounded-l-xl border-r border-line bg-canvas px-3 text-sm text-muted outline-none md:block">
-        <option value="">All</option>
-        {categories.map((p) => (
-          <optgroup key={p.id} label={p.name}>
-            <option value={p.slug}>All {p.name}</option>
-            {p.children.map((c) => <option key={c.id} value={c.slug}>{c.name}</option>)}
-          </optgroup>
-        ))}
-      </select>
+      <Dropdown
+        name="category" label="Category" value={category} onChange={setCategory} className="hidden md:block"
+        buttonClassName="h-full w-36 rounded-l-xl border-r border-line bg-canvas px-3 text-sm text-muted outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+        panelClassName="min-w-60"
+        groups={[
+          { options: [{ value: "", label: "All" }] },
+          ...categories.map((p) => ({ label: p.name, options: [{ value: p.slug, label: `All ${p.name}` }, ...p.children.map((c) => ({ value: c.slug, label: c.name }))] })),
+        ]}
+      />
       <input
         name="q" value={q} autoComplete="off" placeholder="Search products, brands and categories"
         onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(-1); }}
@@ -94,7 +97,7 @@ export function SearchBox({ categories }: { categories: Group[] }) {
                       <span className="block truncate font-medium text-ink">{s.name}</span>
                       <span className="block truncate text-xs text-muted">in {s.category}</span>
                     </span>
-                    <span className="shrink-0 font-semibold text-ink">{formatPrice(s.pricePaise)}</span>
+                    <span className="shrink-0 font-semibold text-ink"><Money paise={s.pricePaise} /></span>
                   </button>
                 </li>
               ))}

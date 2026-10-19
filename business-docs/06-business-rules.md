@@ -24,7 +24,11 @@ Every rule the system applies, with its exact value. Values marked **setting** c
 | Money | Stored in paise, shown in rupees |
 | Delivery fee | **Setting**, default ₹49 |
 | Free delivery | **Setting**: free from an order amount (default ₹499), always free (fee 0) or never free (empty) |
-| Coupon and delivery | A coupon reduces the goods total; the delivery fee is added after |
+| Coupon and delivery | A coupon reduces the goods total; the delivery fee is added after. Free-delivery and gift amounts are measured on the cart value **before** the coupon, so a coupon never removes free delivery |
+| Heavy or bulky products | A product set to always charge delivery pays its own fee (or the store fee) once per order; its money counts towards the free-delivery amount of the regular items, but its own charge stays until the free-everything amount |
+| Free delivery on everything | **Setting** (optional): when the whole basket reaches this amount, every delivery charge is waived |
+| Delivery by area | **Setting**: PIN code starts with their own fee and optional free-over amount |
+| Rewards | **Setting**: free gifts and percentage-off rewards for baskets reaching an amount. A gift is recorded on the order when it is placed. A percentage off (best one reached, optional maximum) is taken before any coupon and kept on the order apart from the coupon discount, so coupon figures stay true |
 | GST | **Setting** on or off, with GSTIN, business name, address, state and a rate on delivery (default 18%). The regime in force when the order was placed is saved on that order, so later changes do not alter old invoices |
 | Invoice | Tax invoice when GST is on, bill of supply when off. Numbered `PREFIX/FINANCIAL-YEAR/SERIAL` (for example `DZ/2026-27/00001`). Prefix is a **setting** |
 
@@ -48,7 +52,12 @@ Every rule the system applies, with its exact value. Values marked **setting** c
 | Types | Percentage (1 to 100, optional maximum discount) or flat rupee amount |
 | Limits | Minimum order, valid-from and valid-until, total uses, uses per customer |
 | First order only | Only for customers with no earlier order that was not cancelled or refunded |
-| Personal code | Tied to one customer; limit one use; shown in their My account |
+| Private code | Tied to one or more chosen customers (by email or mobile number); only they can use it; one use each unless the admin sets another limit; shown in their My account; guests are asked to log in |
+| Same person, second account | Uses are counted across the account, the email address (lower case, no +tag, no dots for Gmail) and the mobile number (last 10 digits, including the delivery number on the order), so a second account does not get a second use |
+| Last use | When two orders try to take the last use of a code at once, only one succeeds; the other is told the code has reached its limit |
+| Order holds the use | An order awaiting payment holds the use for up to 30 minutes; cancelled and refunded orders give it back |
+| Used codes | Cannot be deleted; switch them off |
+| Offers in the cart | A shown, live code is listed to a shopper when it is meant for them, is not used up and they have not used it (account, email, mobile number); a first-order code only before their first order. If the minimum order is not reached it is listed as locked and placed on the progress bar at that amount |
 | Codes | Not case sensitive; extra spaces ignored |
 
 ## Returns and refunds

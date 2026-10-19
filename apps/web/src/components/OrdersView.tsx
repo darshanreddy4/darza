@@ -7,11 +7,12 @@ import { API_URL, formatPrice } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBrand } from "@/components/BrandProvider";
 import { payForOrder, type PaymentParams } from "@/lib/razorpay";
+import { Select } from "@/components/Select";
 
 interface Order {
   id: string; status: string; totalPaise: number; createdAt: string; paymentMethod: string;
-  subtotalPaise: number; discountPaise: number; shippingPaise: number; couponCode: string | null; refundedPaise: number;
-  items: { id: string; quantity: number; pricePaise: number; returnedQty: number; returnableQty: number; product: { name: string; slug: string } }[];
+  subtotalPaise: number; discountPaise: number; rewardDiscountPaise: number; shippingPaise: number; couponCode: string | null; refundedPaise: number; gifts: string[];
+  items: { id: string; quantity: number; pricePaise: number; returnedQty: number; returnableQty: number; returnWindowDays: number; product: { name: string; slug: string } }[];
   returns: { id: string; status: "REQUESTED" | "APPROVED" | "REJECTED" | "REFUNDED"; reason: string; adminNote: string | null; refundPaise: number | null; payoutUpi: string | null; paidOutAt: string | null; items: { orderItemId: string; quantity: number }[] }[];
   returnableUntil: string | null;
   cancelReason: string | null;
@@ -68,19 +69,19 @@ function ReturnPanel({ order, onDone }: { order: Order; onDone: () => void }) {
                 <label className="flex items-center gap-2"><input type="checkbox" name={`pick-${i.id}`} defaultChecked className="h-4 w-4 accent-emerald-600" /> {i.product.name}</label>
                 {i.returnableQty > 1 ? (
                   <label className="flex items-center gap-2 text-xs text-muted">Quantity
-                    <select name={`qty-${i.id}`} defaultValue={i.returnableQty} className="rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink">
+                    <Select name={`qty-${i.id}`} defaultValue={i.returnableQty} className="rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink">
                       {Array.from({ length: i.returnableQty }, (_, n) => n + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
+                    </Select>
                   </label>
                 ) : <input type="hidden" name={`qty-${i.id}`} value="1" />}
               </div>
             ))}
           </fieldset>
           <label className="block font-medium">Why are you returning these?
-            <select name="reason" required defaultValue="" className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
+            <Select name="reason" required defaultValue="" className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
               <option value="" disabled>Select a reason</option>
               {RETURN_REASONS.map((x) => <option key={x}>{x}</option>)}
-            </select>
+            </Select>
           </label>
           {order.paymentMethod === "COD" && (
             <label className="block font-medium">UPI ID for your refund
@@ -128,10 +129,10 @@ function CancelPanel({ order, onDone }: { order: Order; onDone: () => void }) {
       <p className="font-medium">Cancel this order?</p>
       <p className="text-xs text-muted">{refunds ? "Your payment will be refunded to your original payment method; banks usually take 5-7 business days to show it." : "The items go back on the shelf and nothing is charged."}</p>
       <label className="block font-medium">Why are you cancelling?
-        <select name="reason" required defaultValue="" className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
+        <Select name="reason" required defaultValue="" className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm">
           <option value="" disabled>Select a reason</option>
           {CANCEL_REASONS.map((x) => <option key={x}>{x}</option>)}
-        </select>
+        </Select>
       </label>
       <label className="block font-medium">Anything to add? (optional)
         <input name="details" maxLength={200} className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm" />
@@ -218,16 +219,18 @@ export function OrdersView({ placed, reason }: { placed?: "1" | "paid" | "unpaid
               </div>
               <ul className="mt-3 divide-y divide-line text-sm">
                 {o.items.map((i) => (
-                  <li key={i.id} className="flex justify-between gap-3 py-2"><Link href={`/products/${i.product.slug}`} className="hover:text-brand-700">{i.product.name} × {i.quantity}</Link><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>
+                  <li key={i.id} className="flex justify-between gap-3 py-2"><span><Link href={`/products/${i.product.slug}`} className="hover:text-brand-700">{i.product.name} × {i.quantity}</Link>{i.returnWindowDays === 0 && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Non-returnable</span>}</span><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>
                 ))}
               </ul>
               {(o.discountPaise > 0 || o.shippingPaise > 0) && (
                 <dl className="mt-2 space-y-1 border-t border-line pt-2 text-sm text-muted">
                   <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatPrice(o.subtotalPaise)}</dd></div>
-                  {o.discountPaise > 0 && <div className="flex justify-between text-brand-700"><dt>Discount{o.couponCode ? ` (${o.couponCode})` : ""}</dt><dd>-{formatPrice(o.discountPaise)}</dd></div>}
+                  {o.rewardDiscountPaise > 0 && <div className="flex justify-between text-brand-700"><dt>Order reward</dt><dd>-{formatPrice(o.rewardDiscountPaise)}</dd></div>}
+                  {o.discountPaise - o.rewardDiscountPaise > 0 && <div className="flex justify-between text-brand-700"><dt>Discount{o.couponCode ? ` (${o.couponCode})` : ""}</dt><dd>-{formatPrice(o.discountPaise - o.rewardDiscountPaise)}</dd></div>}
                   <div className="flex justify-between"><dt>Delivery</dt><dd>{o.shippingPaise > 0 ? formatPrice(o.shippingPaise) : "Free"}</dd></div>
                 </dl>
               )}
+              {o.gifts?.length > 0 && <p className="mt-2 text-sm font-medium text-brand-700">Free gift with this order: {o.gifts.join(", ")}</p>}
               {o.refundedPaise > 0 && <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">{formatPrice(o.refundedPaise)} was refunded to your original payment method. Banks usually take 5-7 business days to show it.</p>}
               {o.status === "CANCELLED" && o.cancelReason && <p className="mt-2 text-xs text-muted">Cancellation reason: {o.cancelReason}</p>}
               <CancelPanel order={o} onDone={() => setVersion((v) => v + 1)} />

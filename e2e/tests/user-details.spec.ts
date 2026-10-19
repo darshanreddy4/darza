@@ -8,6 +8,8 @@ test.use({ storageState: AUTH_FILES.admin });
 test.describe("admin user details", () => {
   test("the list shows the phone and address the customer gave", async ({ page }) => {
     await page.goto("/admin/users");
+    // Many other specs create customers, so look the person up instead of relying on the first page.
+    await page.getByLabel("Search users").fill(CUSTOMER.email);
     const row = page.getByRole("row", { name: new RegExp(CUSTOMER.email) });
     await expect(row).toContainText("9876543210");
     await expect(row).toContainText("12 Test Street");
@@ -15,6 +17,8 @@ test.describe("admin user details", () => {
 
   test("clicking a name shows what they bought", async ({ page }) => {
     await page.goto("/admin/users");
+    // Many other specs create customers, so look the person up instead of relying on the first page.
+    await page.getByLabel("Search users").fill(CUSTOMER.email);
     await page.getByRole("link", { name: CUSTOMER.name }).click();
     await expect(page.getByRole("heading", { name: CUSTOMER.name })).toBeVisible();
     await expect(page.getByText("9876543210").first()).toBeVisible();
@@ -27,6 +31,8 @@ test.describe("admin user details", () => {
 
   test("the list can be exported as a CSV file", async ({ page }) => {
     await page.goto("/admin/users");
+    // Many other specs create customers, so look the person up instead of relying on the first page.
+    await page.getByLabel("Search users").fill(CUSTOMER.email);
     await expect(page.getByText(CUSTOMER.email)).toBeVisible();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export CSV" }).click()]);
     expect(download.suggestedFilename()).toMatch(/^dmg-users-\d{4}-\d{2}-\d{2}\.csv$/);

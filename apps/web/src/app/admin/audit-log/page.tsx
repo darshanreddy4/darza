@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls, td, th } from "@/components/admin/ui";
+import { Select } from "@/components/Select";
 
 interface Entry { id: string; actorId: string | null; actorName: string; actorRole: "CUSTOMER" | "STAFF" | "ADMIN"; action: string; summary: string; entity: string | null; entityId: string | null; details: Record<string, unknown> | null; createdAt: string }
 interface Page { items: Entry[]; nextBefore: string | null; actors: { id: string | null; name: string }[]; entities: string[] }
@@ -52,14 +53,14 @@ export default function AuditLogPage() {
         description="Every change made in the admin area, newest first: who did it, when, and what was changed."
         actions={
           <div className="flex flex-wrap gap-2">
-            <select value={actorId} onChange={(e) => setActorId(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by person">
+            <Select value={actorId} onChange={(e) => setActorId(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by person">
               <option value="">Everyone</option>
               {actors.filter((a) => a.id).map((a) => <option key={a.id} value={a.id!}>{a.name}</option>)}
-            </select>
-            <select value={entity} onChange={(e) => setEntity(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by area">
+            </Select>
+            <Select value={entity} onChange={(e) => setEntity(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by area">
               <option value="">All areas</option>
               {entities.map((e) => <option key={e} value={e}>{e}</option>)}
-            </select>
+            </Select>
           </div>
         }
       />

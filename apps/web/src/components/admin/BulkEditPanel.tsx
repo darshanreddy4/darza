@@ -5,6 +5,7 @@ import { formatPrice } from "@/lib/api";
 import { useAdminApi, type AdminProduct } from "@/lib/admin";
 import { Alert, Card, btn, inputCls } from "@/components/admin/ui";
 import { useBrand } from "@/components/BrandProvider";
+import { Select } from "@/components/Select";
 
 interface Example { name: string; before: { pricePaise: number; mrpPaise: number | null }; after: { pricePaise: number; mrpPaise: number | null } }
 interface Result { updated: number; missing: number; mrpRemoved: number; skipped: { id: string; name: string; reason: string }[]; examples: Example[]; dryRun: boolean }
@@ -157,10 +158,10 @@ export function BulkEditPanel({ products, onClose, onDone }: { products: AdminPr
 
           <Group title="Selling price" on={priceOn} setOn={setPriceOn}>
             <div className="flex flex-wrap items-center gap-3">
-              <select value={priceMode} onChange={(e) => setPriceMode(e.target.value as "set" | "percent")} className={`${inputCls} !w-auto`} aria-label="How to change the price">
+              <Select value={priceMode} onChange={(e) => setPriceMode(e.target.value as "set" | "percent")} className={`${inputCls} !w-auto`} aria-label="How to change the price">
                 <option value="set">Set every price to (₹)</option>
                 <option value="percent">Change every price by (%)</option>
-              </select>
+              </Select>
               <input value={priceValue} onChange={(e) => setPriceValue(e.target.value)} type="number" step="any" placeholder={priceMode === "set" ? "999" : "-20"} aria-label="Price value" className={`${inputCls} !w-32`} />
             </div>
             {priceMode === "percent" && <p className="text-xs text-muted">Use a minus for a discount: -20 takes 20% off, 10 adds 10%.</p>}
@@ -179,21 +180,21 @@ export function BulkEditPanel({ products, onClose, onDone }: { products: AdminPr
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Group title="Published status" on={statusOn} setOn={setStatusOn}>
-              <select value={status} onChange={(e) => setStatus(e.target.value as "PUBLISHED" | "DRAFT")} className={inputCls} aria-label="Published status">
+              <Select value={status} onChange={(e) => setStatus(e.target.value as "PUBLISHED" | "DRAFT")} className={inputCls} aria-label="Published status">
                 <option value="PUBLISHED">Publish</option><option value="DRAFT">Unpublish (draft)</option>
-              </select>
+              </Select>
             </Group>
             <Group title="Featured" on={featuredOn} setOn={setFeaturedOn}>
-              <select value={featured ? "yes" : "no"} onChange={(e) => setFeatured(e.target.value === "yes")} className={inputCls} aria-label="Featured">
+              <Select value={featured ? "yes" : "no"} onChange={(e) => setFeatured(e.target.value === "yes")} className={inputCls} aria-label="Featured">
                 <option value="yes">Feature on the home page</option><option value="no">Remove from featured</option>
-              </select>
+              </Select>
             </Group>
           </div>
 
           <Group title="Show star rating on the card" on={ratingOn} setOn={setRatingOn}>
-            <select value={rating ? "yes" : "no"} onChange={(e) => setRating(e.target.value === "yes")} className={inputCls} aria-label="Show rating">
+            <Select value={rating ? "yes" : "no"} onChange={(e) => setRating(e.target.value === "yes")} className={inputCls} aria-label="Show rating">
               <option value="yes">Show</option><option value="no">Hide</option>
-            </select>
+            </Select>
           </Group>
 
           <div className="rounded-xl border border-dashed border-line p-4">
@@ -204,9 +205,9 @@ export function BulkEditPanel({ products, onClose, onDone }: { products: AdminPr
                 <input value={stock} onChange={(e) => setStock(e.target.value)} type="number" min={0} step={1} placeholder="Set stock to" aria-label="Stock quantity" className={`${inputCls} !w-40`} />
               </Group>
               <Group title="“Add to cart” button on the card" on={cartOn} setOn={setCartOn}>
-                <select value={cart ? "yes" : "no"} onChange={(e) => setCart(e.target.value === "yes")} className={inputCls} aria-label="Add to cart button">
+                <Select value={cart ? "yes" : "no"} onChange={(e) => setCart(e.target.value === "yes")} className={inputCls} aria-label="Add to cart button">
                   <option value="yes">Show</option><option value="no">Hide</option>
-                </select>
+                </Select>
               </Group>
               <Group title="Delivery date on the card" on={deliveryOn} setOn={setDeliveryOn}>
                 <div className="flex flex-wrap gap-4">

@@ -76,7 +76,11 @@ export function planBulkPatch(row: BulkRow, c: BulkChanges): BulkPlan {
     if (c.showAddToCart !== undefined) patch.showAddToCart = c.showAddToCart;
     if (c.deliveryDays !== undefined) patch.deliveryDays = c.deliveryDays;
     if (c.clearDelivery) { patch.deliveryDays = null; patch.freeDelivery = false; }
-    if (c.freeDelivery !== undefined && !c.clearDelivery) patch.freeDelivery = c.freeDelivery;
+    if (c.freeDelivery !== undefined && !c.clearDelivery) {
+      patch.freeDelivery = c.freeDelivery;
+      // Free and charged delivery exclude each other.
+      if (c.freeDelivery) { patch.chargeDelivery = false; patch.deliveryFeePaise = null; }
+    }
   } else if (Object.keys(patch).length === 0 && OWN_ONLY.some((k) => c[k] !== undefined)) {
     return { patch: {}, skipReason: "Partner products have no stock, delivery or cart settings" };
   }

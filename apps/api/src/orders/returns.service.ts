@@ -8,7 +8,7 @@ import { SmsService } from "../sms/sms.service";
 import { SettingsService } from "../store/settings.service";
 import { DecideReturnDto, RequestReturnDto } from "./order.dto";
 import { OrdersService, orderRef } from "./orders.service";
-import { canRequestReturn, maskUpi, nextReturnState, payoutDue, returnableQty, returnRefund, type RefundOrder } from "./returns";
+import { canRequestReturn, eligibleQty, lineWindow, maskUpi, nextReturnState, payoutDue, returnableQty, returnRefund, type RefundOrder } from "./returns";
 
 const OPEN: ReturnStatus[] = ["REQUESTED", "APPROVED"];
 
@@ -24,19 +24,20 @@ export class ReturnsService {
       const created = await this.prisma.$transaction(async (tx) => {
         // Two requests sent at once must not both claim the same units.
         await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} AND "userId" = ${userId} FOR UPDATE`;
-        const order = await tx.order.findFirst({ where: { id: orderId, userId }, include: { items: true, returns: { where: { status: { in: OPEN } }, select: { items: { select: { orderItemId: true, quantity: true } } } } } });
+        const order = await tx.order.findFirst({ where: { id: orderId, userId }, include: { items: { include: { product: { select: { name: true } } } }, returns: { where: { status: { in: OPEN } }, select: { items: { select: { orderItemId: true, quantity: true } } } } } });
         if (!order) throw new NotFoundException();
 
         const pending = new Map<string, number>();
         for (const r of order.returns) for (const i of r.items) pending.set(i.orderItemId, (pending.get(i.orderItemId) ?? 0) + i.quantity);
-        const lines = order.items.map((i) => ({ id: i.id, quantity: i.quantity, returnedQty: i.returnedQty, pendingQty: pending.get(i.id) ?? 0 }));
+        const lines = order.items.map((i) => ({ id: i.id, quantity: i.quantity, returnedQty: i.returnedQty, pendingQty: pending.get(i.id) ?? 0, returnDays: i.returnDays }));
+        const names = new Map(order.items.map((i) => [i.id, i.product.name]));
         const check = canRequestReturn(order, returnWindowDays, lines);
         if (!check.ok) throw new BadRequestException(check.reason);
         // Cash on delivery has no payment method to send money back to, so we need somewhere to pay it.
         const payoutUpi = order.paymentMethod === "COD" ? dto.upiId?.trim() : undefined;
         if (order.paymentMethod === "COD" && !payoutUpi) throw new BadRequestException("Enter the UPI ID we should send your refund to.");
 
-        const picks = dto.items ?? lines.map((l) => ({ orderItemId: l.id, quantity: returnableQty(l) })).filter((p) => p.quantity > 0);
+        const picks = dto.items ?? lines.map((l) => ({ orderItemId: l.id, quantity: eligibleQty(order, l, returnWindowDays) })).filter((p) => p.quantity > 0);
         if (picks.length === 0) throw new BadRequestException("Choose at least one item to return.");
         const seen = new Set<string>();
         for (const p of picks) {
@@ -44,6 +45,9 @@ export class ReturnsService {
           if (!line) throw new BadRequestException("One of the items is not part of this order.");
           if (seen.has(p.orderItemId)) throw new BadRequestException("Each item can only be listed once.");
           seen.add(p.orderItemId);
+          // An item sold as non-returnable stays non-returnable, whatever the store's window is now.
+          if (lineWindow(line, returnWindowDays) <= 0) throw new BadRequestException(`${names.get(line.id)} cannot be returned; it was sold as non-returnable.`);
+          if (eligibleQty(order, line, returnWindowDays) === 0 && returnableQty(line) > 0) throw new BadRequestException(`The return window for ${names.get(line.id)} has ended.`);
           if (p.quantity > returnableQty(line)) throw new BadRequestException("You can't return more than you have left to return of an item.");
         }
         return tx.returnRequest.create({ data: { orderId, userId, reason: dto.reason, details: dto.details?.trim() || null, payoutUpi: payoutUpi ?? null, items: { create: picks.map((p) => ({ orderItemId: p.orderItemId, quantity: p.quantity })) } }, include: { items: true } });

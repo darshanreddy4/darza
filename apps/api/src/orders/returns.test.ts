@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canRequestReturn, nextReturnState, returnableQty, returnDeadline, returnRefund } from "./returns";
+import { canRequestReturn, eligibleQty, nextReturnState, orderReturnDeadline, returnableQty, returnDeadline, returnRefund } from "./returns";
 
 const now = new Date("2026-10-20T12:00:00Z");
 const delivered = (daysAgo: number) => ({ status: "DELIVERED", deliveredAt: new Date(now.getTime() - daysAgo * 86_400_000) });
@@ -85,4 +85,32 @@ test("a payout is due only for a refunded pay-on-delivery return that has not be
   assert.equal(payoutDue({ ...refunded, refundPaise: 0 }, "COD"), false);
   assert.equal(next("REFUNDED", "paid"), "REFUNDED");
   assert.equal(next("APPROVED", "paid"), null);
+});
+
+test("an item sold as non-returnable can never be put in a return request", () => {
+  const fixed = line({ returnDays: 0 });
+  assert.equal(eligibleQty(delivered(1), fixed, 7, now), 0);
+  assert.equal(eligibleQty(delivered(1), line(), 7, now), 2);
+  assert.equal(eligibleQty(delivered(1), line({ returnDays: null }), 7, now), 2);
+  const only = canRequestReturn(delivered(1), 7, [fixed], now) as { ok: false; reason: string };
+  assert.match(only.reason, /cannot be returned/);
+  // A mixed order can still be returned for the items that allow it.
+  assert.equal(canRequestReturn(delivered(1), 7, [fixed, line()], now).ok, true);
+});
+
+test("each item keeps the window it was sold with", () => {
+  const short = line({ returnDays: 3 });
+  const long = line({ returnDays: 15 });
+  assert.equal(eligibleQty(delivered(5), short, 7, now), 0);
+  assert.equal(eligibleQty(delivered(5), long, 7, now), 2);
+  assert.equal(canRequestReturn(delivered(5), 7, [short], now).ok, false);
+  assert.match((canRequestReturn(delivered(5), 7, [short], now) as { reason: string }).reason, /3-day return window/);
+  assert.equal(canRequestReturn(delivered(5), 7, [short, long], now).ok, true);
+  assert.equal(orderReturnDeadline(delivered(5), [short, long], 7, now)?.toISOString(), "2026-10-30T12:00:00.000Z");
+  assert.equal(orderReturnDeadline(delivered(5), [short], 7, now), null);
+});
+
+test("older orders without a saved window use the store's window", () => {
+  assert.equal(eligibleQty(delivered(5), line(), 7, now), 2);
+  assert.equal(eligibleQty(delivered(8), line(), 7, now), 0);
 });

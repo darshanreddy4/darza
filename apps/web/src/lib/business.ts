@@ -12,7 +12,7 @@ export const business = {
   grievanceEmail: process.env.NEXT_PUBLIC_GRIEVANCE_EMAIL || process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "",
 };
 
-// The env values are the starting point; anything the admin sets under Brand & contact wins.
+// The env values are the starting point; anything the admin sets under Brand & contact (including the legal details) wins.
 export async function getBusiness() {
   const site = await getSite();
   return {
@@ -21,10 +21,14 @@ export async function getBusiness() {
     email: site.email || business.email,
     phone: site.phone || business.phone,
     address: site.address || business.address,
+    legalName: site.legalName || business.legalName,
+    gstin: site.gstin || business.gstin,
+    grievanceOfficer: site.grievanceOfficer || business.grievanceOfficer,
+    grievanceEmail: site.grievanceEmail || site.email || business.grievanceEmail,
   };
 }
 
 export const LEGAL_UPDATED = "13 October 2026";
 
-export const missingBusinessDetails = () =>
-  (["legalName", "email", "phone", "address", "gstin", "grievanceOfficer"] as const).filter((k) => !business[k]);
+export const missingBusinessDetails = (b: Pick<typeof business, "legalName" | "email" | "phone" | "address" | "gstin" | "grievanceOfficer">) =>
+  (["legalName", "email", "phone", "address", "gstin", "grievanceOfficer"] as const).filter((k) => !b[k]);

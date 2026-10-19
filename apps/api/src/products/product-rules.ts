@@ -8,12 +8,15 @@ export interface ProductRuleInput {
   stock?: number | null;
   platform?: string | null;
   affiliateUrl?: string | null;
+  multiBuyQty?: number | null;
+  multiBuyPercent?: number | null;
 }
 
 // Returns a list of human-readable problems; empty means valid.
 export function validateProductRules(p: ProductRuleInput): string[] {
   const errors: string[] = [];
   if (p.mrpPaise != null && p.mrpPaise < p.pricePaise) errors.push("mrpPaise cannot be lower than pricePaise");
+  if ((p.multiBuyQty == null) !== (p.multiBuyPercent == null)) errors.push("A multi-buy offer needs both a quantity and a percentage");
 
   if (p.productType === "OWN") {
     if (!p.sku) errors.push("OWN products require a sku");

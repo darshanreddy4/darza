@@ -10,9 +10,11 @@ import { WhatsAppModule } from "./whatsapp/whatsapp.service";
 import { HealthModule } from "./health/health.module";
 import { AuditModule } from "./audit/audit.module";
 import { AccountModule } from "./account/account.module";
+import { AppearanceModule } from "./appearance/appearance.module";
 import { AuthModule } from "./auth/auth.module";
 import { CategoriesModule } from "./categories/categories.module";
 import { ProductsModule } from "./products/products.module";
+import { PagesModule } from "./pages/pages.module";
 import { UploadsModule } from "./uploads/uploads.module";
 import { OrdersModule } from "./orders/orders.module";
 import { EngagementModule } from "./engagement/engagement.module";
@@ -38,9 +40,11 @@ import { NotificationsModule } from "./notifications/notifications.module";
     AuditModule,
     AuthModule,
     AccountModule,
+    AppearanceModule,
     CategoriesModule,
     ProductsModule,
     UploadsModule,
+    PagesModule,
     OrdersModule,
     EngagementModule,
     AnalyticsModule,

@@ -10,11 +10,16 @@ import { orderUpdateSentence } from "../whatsapp/whatsapp-message";
 import { RazorpayService } from "../payments/razorpay.service";
 import { verifyCheckoutSignature } from "../payments/signature";
 import { CouponsService } from "../store/coupons.service";
-import { computeTotals, shippingFor } from "../store/pricing";
+import { offerText } from "../store/coupon-rules";
+import { multiBuyOf, priceLine } from "../products/multi-buy";
+import { productReturnDays } from "../products/return-policy";
+import { sellingPrice } from "../products/sale";
+import { PincodeService } from "../store/pincode.service";
+import { deliveryModeOf, parseGifts, parseZones, priceBasket, rewardDiscountFor, zoneFor } from "../store/delivery";
 import { SettingsService } from "../store/settings.service";
 import { CreateOrderDto, QuoteDto, VerifyPaymentDto } from "./order.dto";
 import { canCustomerCancel, cancelReasonText } from "./cancel";
-import { canRequestReturn, returnableQty, returnDeadline } from "./returns";
+import { canRequestReturn, eligibleQty, lineWindow, orderReturnDeadline } from "./returns";
 
 // Statuses where stock has been returned to inventory.
 const RELEASED: OrderStatus[] = ["CANCELLED", "REFUNDED"];
@@ -45,6 +50,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     private site: SiteService,
     private whatsapp: WhatsAppService,
     private sms: SmsService,
+    private pincodes: PincodeService,
   ) {}
 
   onModuleInit() {
@@ -59,24 +65,38 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return qty;
   }
 
-  // Prices a basket for the cart and checkout. The per-customer coupon limit is only checked when the order is placed.
+  // Prices a basket for the cart and checkout. A signed-in customer's code limits are checked here too; the delivery phone number only counts when the order is placed.
   async quote(dto: QuoteDto, userId?: string) {
     const settings = await this.settings.get();
     const qty = this.mergeQuantities(dto.items);
-    const products = await this.prisma.product.findMany({ where: { id: { in: [...qty.keys()] }, status: "PUBLISHED", productType: "OWN" }, select: { id: true, pricePaise: true } });
+    const products = await this.prisma.product.findMany({ where: { id: { in: [...qty.keys()] }, status: "PUBLISHED", productType: "OWN" }, select: { id: true, pricePaise: true, productType: true, multiBuyQty: true, multiBuyPercent: true, salePricePaise: true, saleEndsAt: true, returnDays: true, returnPolicy: true, freeDelivery: true, chargeDelivery: true, deliveryFeePaise: true } });
     const price = new Map(products.map((p) => [p.id, p.pricePaise]));
-    const subtotal = [...qty].reduce((sum, [id, q]) => sum + (price.get(id) ?? 0) * q, 0);
+    // "Buy N, save extra P%" is already in the unit prices, so the subtotal is what will be charged for the goods.
+    const lines = products.map((p) => ({ productId: p.id, returnDays: productReturnDays(p, settings.returnWindowDays), ...priceLine(sellingPrice(p), qty.get(p.id) ?? 0, multiBuyOf(p)) }));
+    const subtotal = lines.reduce((sum, l) => sum + l.unitPaise * (qty.get(l.productId) ?? 0), 0);
 
     let discount = 0;
     let coupon: { code: string; description: string | null } | null = null;
     let couponError: string | null = null;
+    const tiers = parseGifts(settings.giftTiers);
+    // A percentage reward comes off first and the coupon works on the rest.
+    const afterReward = subtotal - (rewardDiscountFor(subtotal, tiers)?.paise ?? 0);
     if (dto.couponCode?.trim()) {
-      const found = await this.coupons.evaluate(dto.couponCode, subtotal, userId);
+      const found = await this.coupons.evaluate(dto.couponCode, afterReward, userId);
       if (!found) couponError = "This code isn't valid";
       else if (!found.result.ok) couponError = found.result.reason;
       else { discount = found.result.discountPaise; coupon = { code: found.coupon.code, description: found.coupon.description }; }
     }
-    return { ...computeTotals(subtotal, discount, settings), coupon, couponError, unavailable: [...qty.keys()].filter((id) => !price.has(id)) };
+    const offers = await this.coupons.offers(userId, afterReward);
+    const basket = priceBasket({
+      lines: products.map((p, n) => ({ goodsPaise: lines[n].unitPaise * (qty.get(p.id) ?? 0), mode: deliveryModeOf(p), feePaise: p.deliveryFeePaise })),
+      discountPaise: discount, rules: settings, zone: zoneFor(parseZones(settings.deliveryZones), dto.pincode), gifts: tiers,
+      coupons: offers.filter((o) => o.minOrderPaise > 0).map((o) => ({ title: `${offerText(o)} with code ${o.code}`, atPaise: o.minOrderPaise, reached: o.unlocked })),
+    });
+    return {
+      ...basket, coupon, couponError, offers, unavailable: [...qty.keys()].filter((id) => !price.has(id)),
+      multiBuySavedPaise: lines.reduce((n, l) => n + l.savedPaise, 0), lines,
+    };
   }
 
   async create(userId: string, dto: CreateOrderDto) {
@@ -85,6 +105,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
     const settings = await this.settings.get();
     const brand = await this.site.brandName();
+    await this.pincodes.assertValid(dto.shipping.pincode);
     const qty = this.mergeQuantities(dto.items);
 
     const order = await this.prisma.$transaction(async (tx) => {
@@ -92,40 +113,53 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       if (products.length !== qty.size) throw new BadRequestException("Some products no longer exist");
 
       let subtotal = 0;
+      const unitPrice = new Map<string, number>();
       for (const p of products) {
         if (p.productType !== "OWN" || p.status !== "PUBLISHED") throw new BadRequestException(`${p.name} cannot be purchased on ${brand}`);
         const q = qty.get(p.id)!;
         // Conditional decrement keeps stock from going negative under concurrent orders.
         const res = await tx.product.updateMany({ where: { id: p.id, stock: { gte: q } }, data: { stock: { decrement: q } } });
         if (res.count === 0) throw new ConflictException(`Not enough stock for ${p.name}`);
-        subtotal += p.pricePaise * q;
+        const line = priceLine(sellingPrice(p), q, multiBuyOf(p));
+        unitPrice.set(p.id, line.unitPaise);
+        subtotal += line.unitPaise * q;
       }
 
       let discountPaise = 0;
       let couponId: string | null = null;
       let couponCode: string | null = null;
+      const tiers = parseGifts(settings.giftTiers);
+      const rewardPaise = Math.min(rewardDiscountFor(subtotal, tiers)?.paise ?? 0, subtotal);
+      // The same person is recognised by account, email and phone, also on a second account.
+      const who = await this.coupons.identity(userId, dto.shipping.phone, tx);
       if (dto.couponCode?.trim()) {
-        const found = await this.coupons.evaluate(dto.couponCode, subtotal, userId, tx);
+        const found = await this.coupons.evaluate(dto.couponCode, subtotal - rewardPaise, userId, tx, { shipPhone: dto.shipping.phone, lock: true });
         if (!found) throw new BadRequestException("This coupon code isn't valid");
         if (!found.result.ok) throw new BadRequestException(found.result.reason);
         discountPaise = found.result.discountPaise;
         couponId = found.coupon.id;
         couponCode = found.coupon.code;
       }
-      const shippingPaise = shippingFor(subtotal - discountPaise, settings);
+      const basket = priceBasket({
+        lines: products.map((p) => ({ goodsPaise: unitPrice.get(p.id)! * qty.get(p.id)!, mode: deliveryModeOf(p), feePaise: p.deliveryFeePaise })),
+        discountPaise, rules: settings, zone: zoneFor(parseZones(settings.deliveryZones), dto.shipping.pincode), gifts: tiers,
+      });
+      const shippingPaise = basket.shippingPaise;
+      const totalDiscount = discountPaise + basket.rewardDiscountPaise;
 
       return tx.order.create({
         data: {
           userId,
           status: online ? "PENDING_PAYMENT" : "PLACED",
           paymentMethod: online ? "ONLINE" : "COD",
-          subtotalPaise: subtotal, discountPaise, shippingPaise, totalPaise: subtotal - discountPaise + shippingPaise,
+          subtotalPaise: subtotal, discountPaise: totalDiscount, rewardDiscountPaise: basket.rewardDiscountPaise, shippingPaise, totalPaise: subtotal - totalDiscount + shippingPaise, gifts: basket.earnedGifts,
           couponId, couponCode, gstApplied: settings.gstEnabled,
+          buyerEmailKey: who?.emailKey ?? null, buyerPhoneKey: who?.phoneKey ?? null, shipPhoneKey: who?.shipPhoneKey ?? null,
           whatsappOptIn: !!dto.whatsappUpdates && this.whatsapp.available,
           shippingName: dto.shipping.name,
           shippingAddr: dto.shipping as unknown as Prisma.InputJsonValue,
           items: {
-            create: products.map((p) => ({ productId: p.id, quantity: qty.get(p.id)!, pricePaise: p.pricePaise, costPaise: p.costPaise, gstRatePercent: p.gstRatePercent })),
+            create: products.map((p) => ({ productId: p.id, quantity: qty.get(p.id)!, pricePaise: unitPrice.get(p.id)!, costPaise: p.costPaise, gstRatePercent: p.gstRatePercent, returnDays: productReturnDays(p, settings.returnWindowDays) })),
           },
         },
         include: orderInclude,
@@ -214,9 +248,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       // Units sitting in a request that is still open are not available for another one.
       const pending = new Map<string, number>();
       for (const r of o.returns) if (r.status === "REQUESTED" || r.status === "APPROVED") for (const i of r.items) pending.set(i.orderItemId, (pending.get(i.orderItemId) ?? 0) + i.quantity);
-      const items = o.items.map((i) => ({ ...i, returnableQty: returnableQty({ quantity: i.quantity, returnedQty: i.returnedQty, pendingQty: pending.get(i.id) ?? 0 }) }));
-      const ok = canRequestReturn(o, returnWindowDays, items.map((i) => ({ quantity: i.quantity, returnedQty: i.returnedQty, pendingQty: i.quantity - i.returnedQty - i.returnableQty }))).ok;
-      return { ...o, items, returnableUntil: ok ? returnDeadline(o, returnWindowDays) : null };
+      const lines = o.items.map((i) => ({ quantity: i.quantity, returnedQty: i.returnedQty, pendingQty: pending.get(i.id) ?? 0, returnDays: i.returnDays }));
+      // returnWindowDays is the window each item was sold with; 0 marks one that cannot be returned.
+      const items = o.items.map((i, n) => ({ ...i, returnWindowDays: lineWindow(lines[n], returnWindowDays), returnableQty: eligibleQty(o, lines[n], returnWindowDays) }));
+      const ok = canRequestReturn(o, returnWindowDays, lines).ok;
+      return { ...o, items, returnableUntil: ok ? orderReturnDeadline(o, lines, returnWindowDays) : null };
     });
   }
 

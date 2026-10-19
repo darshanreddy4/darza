@@ -5,7 +5,7 @@ import { AUTH_FILES } from "./data";
 // Pages a shopper or an admin uses. Scanned at a desktop and a phone width against WCAG 2.1 A and AA.
 const PUBLIC_PAGES = ["/", "/products", "/products/e2e-power-bank", "/products/e2e-sold-out-lamp", "/products?q=power", "/cart", "/login", "/signup", "/forgot-password", "/about", "/contact", "/terms", "/privacy", "/refund-policy", "/shipping-policy"];
 const CUSTOMER_PAGES = ["/account", "/orders", "/wishlist", "/checkout"];
-const ADMIN_PAGES = ["/admin", "/admin/orders", "/admin/products", "/admin/products/new", "/admin/returns", "/admin/questions", "/admin/abandoned-carts", "/admin/analytics", "/admin/users", "/admin/settings", "/admin/coupons", "/admin/home", "/admin/attention"];
+const ADMIN_PAGES = ["/admin", "/admin/orders", "/admin/products", "/admin/products/new", "/admin/returns", "/admin/questions", "/admin/abandoned-carts", "/admin/analytics", "/admin/users", "/admin/settings", "/admin/appearance", "/admin/brand", "/admin/coupons", "/admin/home", "/admin/attention"];
 
 const SIZES = [{ name: "desktop", width: 1366, height: 860 }, { name: "phone", width: 390, height: 844 }];
 

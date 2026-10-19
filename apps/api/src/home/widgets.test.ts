@@ -138,3 +138,58 @@ test("a product grid keeps its card size choice, and defaults to fitting the row
   const [b] = ok([{ type: "products", config: { source: "new", cardSize: "huge" } }]);
   assert.deepEqual([a.config.cardSize, b.config.cardSize], ["medium", "auto"]);
 });
+
+test("an icon grid keeps only icons with a picture and clamps its settings", () => {
+  const [grid] = ok([{ type: "icon-grid", config: { columns: 99, shape: "hexagon", accent: "purple", items: [{ title: "No picture" }, { imageUrl: "/uploads/a.png", title: "Skincare", linkUrl: "/products?category=skincare" }] } }]);
+  assert.equal(grid.config.columns, 10);
+  assert.equal(grid.config.shape, "rounded");
+  assert.equal(grid.config.size, "large");
+  assert.equal(grid.config.fit, "fill");
+  assert.equal(grid.config.accent, "purple");
+  assert.deepEqual(grid.config.items, [{ imageUrl: "/uploads/a.png", title: "Skincare", linkUrl: "/products?category=skincare" }]);
+  assert.match(errors([{ type: "icon-grid", config: { items: [{ imageUrl: "/uploads/a.png", linkUrl: "javascript:alert(1)" }] } }])[0], /Icon link must be/);
+});
+
+test("an icon grid accepts the extra shapes and sizes and falls back for unknown ones", () => {
+  const [a] = ok([{ type: "icon-grid", config: { shape: "wide", size: "xsmall", items: [{ imageUrl: "/uploads/a.png" }] } }]);
+  assert.equal(a.config.shape, "wide");
+  assert.equal(a.config.size, "xsmall");
+  assert.equal(ok([{ type: "icon-grid", config: { fit: "whole", items: [{ imageUrl: "/uploads/a.png" }] } }])[0].config.fit, "whole");
+  const [b] = ok([{ type: "icon-grid", config: { shape: "tall", size: "huge", items: [{ imageUrl: "/uploads/a.png" }] } }]);
+  assert.equal(b.config.shape, "tall");
+  assert.equal(b.config.size, "large");
+});
+
+test("brand cards need a logo, a picture or a headline, and use a known background", () => {
+  const [cards] = ok([{ type: "brand-cards", config: { columns: 9, background: "neon", items: [{}, { headline: "Up to 35% Off", logoUrl: "https://example.com/logo.png", imageUrl: "/uploads/p.png" }] } }]);
+  assert.equal(cards.config.columns, 3);
+  assert.equal(cards.config.background, "sky");
+  assert.equal((cards.config.items as unknown[]).length, 1);
+  assert.match(errors([{ type: "brand-cards", config: { items: [{ headline: "x", logoUrl: "http://x.test/l.png" }] } }])[0], /Logo must be/);
+});
+
+test("an image banner needs a picture and a safe link", () => {
+  assert.match(errors([{ type: "image-banner", config: {} }])[0], /banner image/);
+  const [b] = ok([{ type: "image-banner", config: { imageUrl: "/uploads/b.png", mobileImageUrl: "/uploads/m.png", badge: "AD", linkUrl: "https://brand.example/sale", ratio: "huge" } }]);
+  assert.equal(b.config.badge, "AD");
+  assert.equal(b.config.ratio, "wide");
+  assert.match(errors([{ type: "image-banner", config: { imageUrl: "/uploads/b.png", linkUrl: "//evil.example" } }])[0], /Link must be/);
+});
+
+test("offer cards keep picture cards, labels, tags and the panel choices", () => {
+  const [o] = ok([{ type: "offer-cards", config: { layout: "grid", perView: 12, theme: "purple", strip: "dark", captionStyle: "overlay", headerImageUrl: "/uploads/h.png", items: [{ label: "No picture" }, { imageUrl: "/uploads/a.png", label: "Under ₹279", title: "Primer", badge: "AD", linkUrl: "/products" }] } }]);
+  assert.deepEqual([o.config.layout, o.config.perView, o.config.theme, o.config.strip, o.config.captionStyle], ["grid", 6, "purple", "dark", "overlay"]);
+  assert.deepEqual(o.config.items, [{ imageUrl: "/uploads/a.png", label: "Under ₹279", title: "Primer", badge: "AD", linkUrl: "/products" }]);
+  const [d] = ok([{ type: "offer-cards", config: { theme: "rainbow", strip: "none" } }]);
+  assert.equal(d.config.theme, "none");
+  assert.equal(d.config.layout, "slider");
+  assert.match(errors([{ type: "offer-cards", config: { headerImageUrl: "http://x.test/h.png" } }])[0], /Header image must be/);
+});
+
+test("offer cards can have a picture behind them, with a tint and a text colour", () => {
+  const [o] = ok([{ type: "offer-cards", config: { panelImageUrl: "/uploads/p.png", panelOverlay: "dark", panelText: "light", items: [{ imageUrl: "/uploads/a.png" }] } }]);
+  assert.deepEqual([o.config.panelImageUrl, o.config.panelOverlay, o.config.panelText], ["/uploads/p.png", "dark", "light"]);
+  const [d] = ok([{ type: "offer-cards", config: { panelOverlay: "sepia", panelText: "pink" } }]);
+  assert.deepEqual([d.config.panelImageUrl, d.config.panelOverlay, d.config.panelText], ["", "none", "auto"]);
+  assert.match(errors([{ type: "offer-cards", config: { panelImageUrl: "http://x.test/p.png" } }])[0], /Panel image must be/);
+});

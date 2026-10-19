@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { useAdminApi, useAdminQuery, type AdminBanner, type AdminCategory } from "@/lib/admin";
+import { toIso, toLocalInput, useAdminApi, useAdminQuery, type AdminBanner, type AdminCategory } from "@/lib/admin";
 import { HeroBanners } from "@/components/HeroBanners";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 import { VideoUploader } from "@/components/admin/VideoUploader";
@@ -11,14 +11,6 @@ import { DEFAULT_TEXT_POSITION, isBannerPosition, type BannerPosition } from "@/
 import { Alert, Card, btn, inputCls } from "@/components/admin/ui";
 import { useBrand } from "@/components/BrandProvider";
 
-// <input type="datetime-local"> works in local time without a timezone suffix.
-const toLocalInput = (iso: string | null) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-};
-const toIso = (local: string) => (local ? new Date(local).toISOString() : null);
 
 export function BannerForm({ initial }: { initial?: AdminBanner }) {
   const brand = useBrand();
@@ -93,7 +85,7 @@ export function BannerForm({ initial }: { initial?: AdminBanner }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <Card title="Image" description="Wide images work best: about 1600 × 600 pixels.">
-            <ImageUploader images={images} setImages={setImages} max={1} hint="recommended 1600×600" />
+            <ImageUploader images={images} setImages={setImages} max={1} hint="recommended 1600×600" crop={{ w: 1600, h: 600 }} />
           </Card>
 
           <Card title="Video" description="Optional. Upload a short clip (up to 60 seconds) or paste a YouTube link. It plays silently in place of the image, with a sound button for visitors. The image above is shown while it loads and for visitors who prefer reduced motion.">

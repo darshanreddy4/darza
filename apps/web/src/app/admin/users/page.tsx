@@ -6,6 +6,7 @@ import { API_URL, formatPrice } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls, td, th } from "@/components/admin/ui";
+import { Select } from "@/components/Select";
 
 type Role = "CUSTOMER" | "STAFF" | "ADMIN";
 interface UserRow { id: string; email: string | null; signIn: string[]; name: string; role: Role; emailVerified: boolean; createdAt: string; phone: string; address: string; orders: number; spentPaise: number }
@@ -82,12 +83,12 @@ export default function UsersPage() {
 
       <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
         <input className={inputCls} placeholder="Search name, email or phone" aria-label="Search users" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className={inputCls} aria-label="Filter by role" value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
+        <Select className={inputCls} aria-label="Filter by role" value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
           <option value="">All roles</option><option value="ADMIN">Admins</option><option value="STAFF">Staff</option><option value="CUSTOMER">Customers</option>
-        </select>
-        <select className={inputCls} aria-label="Filter by email status" value={verified} onChange={(e) => { setVerified(e.target.value); setPage(1); }}>
+        </Select>
+        <Select className={inputCls} aria-label="Filter by email status" value={verified} onChange={(e) => { setVerified(e.target.value); setPage(1); }}>
           <option value="">Any email status</option><option value="true">Verified</option><option value="false">Not verified</option>
-        </select>
+        </Select>
       </div>
 
       <Card padded={false}>
@@ -110,7 +111,7 @@ export default function UsersPage() {
                       <td className={td}>{u.orders}{u.spentPaise > 0 && <p className="text-xs text-muted">{formatPrice(u.spentPaise)} spent</p>}</td>
                       <td className={`${td} text-muted`}>{new Date(u.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</td>
                       <td className={td}>
-                        <select
+                        <Select
                           className={`${inputCls} !w-auto !py-1.5`}
                           aria-label={`Role for ${who(u)}`}
                           value={u.role}
@@ -119,7 +120,7 @@ export default function UsersPage() {
                           onChange={(e) => changeRole(u, e.target.value as Role)}
                         >
                           <option value="CUSTOMER">Customer</option><option value="STAFF">Staff</option><option value="ADMIN">Admin</option>
-                        </select>
+                        </Select>
                       </td>
                       <td className={`${td} text-right`}>
                         {!self && (

@@ -125,7 +125,9 @@ The same applies to refunding a return, marking a payout paid, editing products,
 4. Customers see the banner and block immediately; shoppers enter the code in the cart.
 5. After the sale, the coupon's **usage figures** show how often it was used. Cancelled and refunded orders give their coupon use back.
 
-**A code just for one person:** create the coupon, choose the customer, and it is limited to one use and listed in that customer's My account.
+**A code just for some people:** create the coupon and list their emails or mobile numbers. Only they can use it, once each, and it is listed in their My account.
+
+**One use per person:** set uses per customer to 1. The same person with a second account (same email or mobile number) is refused, and so is an order delivered to a mobile number that already used it. If the order is cancelled, the use comes back.
 
 ---
 

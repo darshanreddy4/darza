@@ -28,7 +28,7 @@ export default async function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-10">
       <header className="space-y-4">
-        {site.logoUrl && <Logo light={false} logoUrl={site.logoUrl} name={biz.name} />}
+        {(site.logoUrl || site.logoDesign.mode === "TEXT") && <Logo light={false} logoUrl={site.logoUrl} name={biz.name} design={site.logoDesign} />}
         <h1 className="text-4xl font-bold">About {biz.name}</h1>
         {site.tagline && <p className="text-lg text-muted">{site.tagline}</p>}
       </header>

@@ -1,6 +1,7 @@
+import { pick } from "./helpers";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { API, AUTH_FILES } from "./data";
-import { adminProduct, asBrowser, newCustomer } from "./helpers";
+import { adminProduct, asBrowser, expectOptions, newCustomer } from "./helpers";
 
 test.use({ storageState: AUTH_FILES.admin });
 
@@ -30,7 +31,7 @@ test.describe.serial("staff role and audit log", () => {
     const select = page.getByLabel(/Role for /);
     await expect(select).toHaveCount(1);
     page.once("dialog", (d) => d.accept());
-    await select.selectOption("STAFF");
+    await pick(select, "STAFF");
     await expect(page.getByText(/is now staff/)).toBeVisible();
   });
 
@@ -81,9 +82,7 @@ test.describe.serial("staff role and audit log", () => {
 
     await page.getByRole("button", { name: ref() }).click();
     const status = page.getByLabel(`Status for order ${orderId.slice(-8)}`);
-    await expect(status.getByRole("option", { name: "Delivered" })).toBeAttached();
-    await expect(status.getByRole("option", { name: "Cancelled" })).toHaveCount(0);
-    await expect(status.getByRole("option", { name: "Refunded" })).toHaveCount(0);
+    await expectOptions(status, { present: ["Delivered"], absent: ["Cancelled", "Refunded"] });
 
     await page.goto("/admin/settings");
     await expect(page).toHaveURL(/\/admin\/orders/);
@@ -123,7 +122,7 @@ test.describe.serial("staff role and audit log", () => {
   test("admins read the log on a page and can filter by person", async ({ page }) => {
     await page.goto("/admin/audit-log");
     await expect(page.getByRole("row", { name: new RegExp(`${STAFF_NAME} Staff Set order ${ref()} to shipped`) })).toBeVisible();
-    await page.getByLabel("Filter by person").selectOption({ label: STAFF_NAME });
+    await pick(page.getByLabel("Filter by person"), { label: STAFF_NAME });
     await expect(page.getByRole("row", { name: /E2E Admin/ })).toHaveCount(0);
     await expect(page.getByRole("row", { name: new RegExp(`Set order ${ref()} to shipped`) })).toBeVisible();
     await page.getByRole("button", { name: "Details" }).first().click();

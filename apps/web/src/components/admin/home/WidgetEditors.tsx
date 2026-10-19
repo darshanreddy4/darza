@@ -3,9 +3,10 @@
 import { useState, type ReactNode } from "react";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { adsenseSummary, parseAdsenseCode } from "@/lib/adsense";
-import { ADSENSE_PLACEMENTS, PRODUCT_SOURCES, TRUST_ICONS, TRUST_ICON_LABELS, type WidgetType } from "@/lib/home";
+import { ADSENSE_PLACEMENTS, BANNER_CROP, ICON_SHAPES, ICON_SIZE_NAMES, ICON_WIDTHS, OFFER_CARD_CROP, PHONE_BANNER_CROP, PRODUCT_SOURCES, TILE_CROP, TRUST_ICONS, TRUST_ICON_LABELS, iconCrop, iconPixels, type CropSize, type IconShape, type IconSize, type WidgetType } from "@/lib/home";
 import { btn, inputCls } from "@/components/admin/ui";
 import { ImageField } from "@/components/admin/ImageField";
+import { Select } from "@/components/Select";
 
 type Config = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 interface EditorProps { config: Config; set: (patch: Config) => void }
@@ -30,9 +31,9 @@ function Text({ name, value, onChange, max, placeholder, hint: h, multiline }: {
 function Choice<T extends string | number>({ name, value, options, onChange, hint: h }: { name: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; hint?: string }) {
   return (
     <Field name={name} hint={h}>
-      <select className={inputCls} value={value} onChange={(e) => onChange((typeof value === "number" ? Number(e.target.value) : e.target.value) as T)}>
+      <Select className={inputCls} value={value} onChange={(e) => onChange((typeof value === "number" ? Number(e.target.value) : e.target.value) as T)}>
         {options.map((o) => <option key={String(o.value)} value={o.value}>{o.label}</option>)}
-      </select>
+      </Select>
     </Field>
   );
 }
@@ -175,14 +176,14 @@ function AdsenseEditor({ config, set }: EditorProps) {
   );
 }
 
-function TilesList({ config, set, max }: EditorProps & { max: number }) {
+function TilesList({ config, set, max, crop }: EditorProps & { max: number; crop: CropSize }) {
   return (
     <ListEditor
       items={config.items ?? []} onChange={(items) => set({ items })} max={max} noun="Tile" addLabel="+ Add a tile"
       blank={{ imageUrl: "", title: "", text: "", linkUrl: "" }}
       render={(item: Config, up) => (
         <>
-          <ImageField name="Picture (required)" value={item.imageUrl ?? ""} onChange={(v) => up({ imageUrl: v })} />
+          <ImageField name="Picture (required)" value={item.imageUrl ?? ""} onChange={(v) => up({ imageUrl: v })} crop={crop} />
           <div className="grid gap-3 sm:grid-cols-3">
             <Text name="Title" value={item.title} onChange={(v) => up({ title: v })} max={60} />
             <Text name="Text" value={item.text} onChange={(v) => up({ text: v })} max={120} />
@@ -193,6 +194,12 @@ function TilesList({ config, set, max }: EditorProps & { max: number }) {
     />
   );
 }
+
+const ACCENTS = [{ value: "gold", label: "Gold" }, { value: "brand", label: "Green" }, { value: "purple", label: "Purple" }, { value: "dark", label: "Dark" }, { value: "none", label: "None" }];
+const BRAND_COLOURS = [
+  { value: "sky", label: "Sky blue to pink" }, { value: "sunset", label: "Sunset" }, { value: "mint", label: "Mint" }, { value: "lavender", label: "Lavender" },
+  { value: "gold", label: "Cream and gold" }, { value: "brand", label: "Soft green" }, { value: "dark", label: "Dark" }, { value: "white", label: "White" },
+];
 
 const EDITORS: Partial<Record<WidgetType, (p: EditorProps) => ReactNode>> = {
   adsense: (p) => <AdsenseEditor {...p} />,
@@ -252,7 +259,7 @@ const EDITORS: Partial<Record<WidgetType, (p: EditorProps) => ReactNode>> = {
         <Text name="Small text under the heading" value={config.subtitle} onChange={(v) => set({ subtitle: v })} max={160} />
         <Choice name="Tiles per row (large screens)" value={config.columns} options={[{ value: 2, label: "2" }, { value: 3, label: "3" }, { value: 4, label: "4" }]} onChange={(v) => set({ columns: v })} />
       </div>
-      <TilesList config={config} set={set} max={8} />
+      <TilesList config={config} set={set} max={8} crop={TILE_CROP.landscape} />
     </div>
   ),
 
@@ -264,7 +271,119 @@ const EDITORS: Partial<Record<WidgetType, (p: EditorProps) => ReactNode>> = {
         <Choice name="Tiles visible at once (large screens)" value={config.perView} options={[{ value: 2, label: "2" }, { value: 3, label: "3" }, { value: 4, label: "4" }, { value: 5, label: "5" }]} onChange={(v) => set({ perView: v })} hint="Phones show about one and a half, tablets two. The rest slide in with the side arrows or a swipe." />
         <Choice name="Tile shape" value={config.shape} options={[{ value: "landscape", label: "Wide" }, { value: "square", label: "Square" }, { value: "portrait", label: "Tall" }]} onChange={(v) => set({ shape: v })} />
       </div>
-      <TilesList config={config} set={set} max={20} />
+      <TilesList config={config} set={set} max={20} crop={TILE_CROP[config.shape as keyof typeof TILE_CROP] ?? TILE_CROP.landscape} />
+    </div>
+  ),
+
+  "icon-grid": ({ config, set }) => (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Text name="Heading" value={config.title} onChange={(v) => set({ title: v })} max={80} />
+        <Text name="Small text under the heading" value={config.subtitle} onChange={(v) => set({ subtitle: v })} max={160} />
+        <Choice name="Icons per row (large screens)" value={config.columns} options={[3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ value: n, label: String(n) }))} onChange={(v) => set({ columns: v })} hint="Phones show 3 per row, tablets 4 or 5." />
+        <Choice name="Shape" value={config.shape} options={(Object.keys(ICON_SHAPES) as IconShape[]).map((k) => ({ value: k, label: ICON_SHAPES[k].name + (ICON_SHAPES[k].ratio[0] === ICON_SHAPES[k].ratio[1] ? "" : ` (${ICON_SHAPES[k].ratio[0]}:${ICON_SHAPES[k].ratio[1]})`) }))} onChange={(v) => set({ shape: v })} />
+        <Choice name="Icon size" value={config.size ?? "large"} options={(Object.keys(ICON_WIDTHS) as IconSize[]).map((k) => { const { w, h } = iconPixels(k, config.shape); return { value: k, label: `${ICON_SIZE_NAMES[k]} - ${w} × ${h} px (upload ${w * 2} × ${h * 2} px)` }; })} onChange={(v) => set({ size: v })} hint="Shows the size each icon appears on a large screen and the picture size to upload (twice as big keeps it sharp on phones). Crop your pictures to this ratio for a clean fit." />
+        <Choice name="Picture fit" value={config.fit ?? "fill"} options={[{ value: "fill", label: "Fill the icon (edges may be cropped)" }, { value: "whole", label: "Show the whole picture (leaves a margin)" }]} onChange={(v) => set({ fit: v })} />
+        <Choice name="Coloured bar at the bottom" value={config.accent} options={ACCENTS} onChange={(v) => set({ accent: v })} hint="Not shown on circles." />
+        <Choice name="Icon background" value={config.background} options={[{ value: "cream", label: "Cream" }, { value: "white", label: "White" }, { value: "soft", label: "Soft green" }]} onChange={(v) => set({ background: v })} />
+      </div>
+      <ListEditor
+        items={config.items ?? []} onChange={(items) => set({ items })} max={30} noun="Icon" addLabel="+ Add an icon"
+        blank={{ imageUrl: "", title: "", linkUrl: "" }}
+        render={(item: Config, up) => (
+          <>
+            <ImageField name="Picture (required)" value={item.imageUrl ?? ""} onChange={(v) => up({ imageUrl: v })} crop={iconCrop(config.size ?? "large", config.shape ?? "rounded")} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Text name="Label under the icon" value={item.title} onChange={(v) => up({ title: v })} max={40} placeholder="Skincare" />
+              <Text name="Link" value={item.linkUrl} onChange={(v) => up({ linkUrl: v })} placeholder="/products?category=skincare" />
+            </div>
+          </>
+        )}
+      />
+    </div>
+  ),
+
+  "brand-cards": ({ config, set }) => (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Text name="Heading" value={config.title} onChange={(v) => set({ title: v })} max={80} />
+        <Text name="Small text under the heading" value={config.subtitle} onChange={(v) => set({ subtitle: v })} max={160} />
+        <Choice name="Cards per row (large screens)" value={config.columns} options={[{ value: 1, label: "1" }, { value: 2, label: "2" }, { value: 3, label: "3" }]} onChange={(v) => set({ columns: v })} />
+        <Choice name="Card colour" value={config.background} options={BRAND_COLOURS} onChange={(v) => set({ background: v })} />
+      </div>
+      <ListEditor
+        items={config.items ?? []} onChange={(items) => set({ items })} max={12} noun="Card" addLabel="+ Add a card"
+        blank={{ logoUrl: "", headline: "", imageUrl: "", linkUrl: "" }}
+        render={(item: Config, up) => (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ImageField name="Brand logo (shown on a white tab)" value={item.logoUrl ?? ""} onChange={(v) => up({ logoUrl: v })} />
+              <ImageField name="Product picture (right side)" value={item.imageUrl ?? ""} onChange={(v) => up({ imageUrl: v })} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Text name="Headline" value={item.headline} onChange={(v) => up({ headline: v })} max={60} placeholder="Up to 35% Off" />
+              <Text name="Link" value={item.linkUrl} onChange={(v) => up({ linkUrl: v })} placeholder="/products?category=beauty" />
+            </div>
+          </>
+        )}
+      />
+    </div>
+  ),
+
+  "image-banner": ({ config, set }) => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Text name="Heading above the banner (optional)" value={config.title} onChange={(v) => set({ title: v })} max={80} placeholder="Brand in spotlight" />
+      <Choice name="Shape" value={config.ratio} options={[{ value: "ultra", label: "Very wide and slim" }, { value: "wide", label: "Wide" }, { value: "standard", label: "Taller" }]} onChange={(v) => set({ ratio: v })} hint="Pictures are cropped to fit, so keep the important part in the middle." />
+      <div className="sm:col-span-2"><ImageField name="Banner picture (required)" value={config.imageUrl ?? ""} onChange={(v) => set({ imageUrl: v })} crop={BANNER_CROP[config.ratio as keyof typeof BANNER_CROP] ?? BANNER_CROP.wide} /></div>
+      <div className="sm:col-span-2"><ImageField name="Picture for phones (optional)" value={config.mobileImageUrl ?? ""} onChange={(v) => set({ mobileImageUrl: v })} crop={PHONE_BANNER_CROP} /></div>
+      <Text name="Picture description" value={config.alt} onChange={(v) => set({ alt: v })} max={120} placeholder="Fragrance for men, minimum 60% off" hint="Read aloud to people who cannot see the picture. Say what the banner says." />
+      <Text name="Link" value={config.linkUrl} onChange={(v) => set({ linkUrl: v })} placeholder="/products?type=OWN" hint="A page on this site, or an https:// address." />
+      <Text name="Small tag in the corner (optional)" value={config.badge} onChange={(v) => set({ badge: v })} max={12} placeholder="AD" hint="For example AD or SPONSORED." />
+    </div>
+  ),
+
+  "offer-cards": ({ config, set }) => (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Text name="Heading" value={config.title} onChange={(v) => set({ title: v })} max={80} />
+        <Text name="Small text under the heading" value={config.subtitle} onChange={(v) => set({ subtitle: v })} max={160} />
+        <Choice name="Style" value={config.layout} options={[{ value: "slider", label: "Slider with arrows" }, { value: "grid", label: "Grid" }]} onChange={(v) => set({ layout: v })} />
+        <Choice name={config.layout === "grid" ? "Cards per row (large screens)" : "Cards visible at once (large screens)"} value={config.perView} options={[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))} onChange={(v) => set({ perView: v })} />
+        <Choice name="Card shape" value={config.shape} options={[{ value: "square", label: "Square" }, { value: "portrait", label: "Tall" }, { value: "landscape", label: "Wide" }]} onChange={(v) => set({ shape: v })} />
+        <Choice name="Picture fit" value={config.imageFit} options={[{ value: "cover", label: "Fill the card (may crop)" }, { value: "contain", label: "Show the whole picture" }]} onChange={(v) => set({ imageFit: v })} hint="“Show the whole picture” suits logos and product shots." />
+        <Choice name="Caption position" value={config.captionStyle} options={[{ value: "below", label: "Below the card" }, { value: "overlay", label: "On the picture" }]} onChange={(v) => set({ captionStyle: v })} />
+        <Choice name="Label strip colour" value={config.strip} options={ACCENTS} onChange={(v) => set({ strip: v })} hint="The strip shows each card's label, such as “Under ₹279”. With no strip the label is shown as a caption." />
+        <Choice name="Card background" value={config.cardBackground} options={[{ value: "cream", label: "Cream" }, { value: "white", label: "White" }, { value: "lavender", label: "Lavender" }, { value: "none", label: "None" }]} onChange={(v) => set({ cardBackground: v })} />
+        <Choice name="Coloured panel behind the cards" value={config.theme} options={[{ value: "none", label: "None" }, { value: "gold", label: "Gold" }, { value: "purple", label: "Purple" }, { value: "brand", label: "Green" }, { value: "dark", label: "Dark" }, { value: "soft", label: "Soft green" }]} onChange={(v) => set({ theme: v })} />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2 rounded-xl border border-line p-4">
+          <p className="text-sm font-semibold">Picture behind the cards (optional)</p>
+          <p className="mt-0.5 text-xs text-muted">Shown across the whole panel, on top of the panel colour. Use a wide picture, such as a festive pattern.</p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2"><ImageField name="Panel picture" value={config.panelImageUrl ?? ""} onChange={(v) => set({ panelImageUrl: v })} /></div>
+            <Choice name="Tint over the picture" value={config.panelOverlay ?? "none"} options={[{ value: "none", label: "None" }, { value: "dark", label: "Dark (for bright pictures)" }, { value: "light", label: "Light (for dark pictures)" }]} onChange={(v) => set({ panelOverlay: v })} hint="A tint keeps the heading and captions easy to read." />
+            <Choice name="Text colour on the panel" value={config.panelText ?? "auto"} options={[{ value: "auto", label: "Automatic" }, { value: "light", label: "White" }, { value: "dark", label: "Dark" }]} onChange={(v) => set({ panelText: v })} />
+          </div>
+        </div>
+        <ImageField name="Header picture above the cards (optional)" value={config.headerImageUrl ?? ""} onChange={(v) => set({ headerImageUrl: v })} />
+        <Text name="Header picture description" value={config.headerAlt} onChange={(v) => set({ headerAlt: v })} max={120} placeholder="From Garba nights to Diwali lights" hint="Say what the picture says, for people who cannot see it." />
+      </div>
+      <ListEditor
+        items={config.items ?? []} onChange={(items) => set({ items })} max={24} noun="Card" addLabel="+ Add a card"
+        blank={{ imageUrl: "", label: "", title: "", badge: "", linkUrl: "" }}
+        render={(item: Config, up) => (
+          <>
+            <ImageField name="Picture (required)" value={item.imageUrl ?? ""} onChange={(v) => up({ imageUrl: v })} crop={OFFER_CARD_CROP[config.shape as keyof typeof OFFER_CARD_CROP] ?? OFFER_CARD_CROP.square} />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Text name="Label (strip)" value={item.label} onChange={(v) => up({ label: v })} max={40} placeholder="Under ₹279" />
+              <Text name="Caption" value={item.title} onChange={(v) => up({ title: v })} max={60} placeholder="Primer" />
+              <Text name="Tag (optional)" value={item.badge} onChange={(v) => up({ badge: v })} max={12} placeholder="AD" />
+              <Text name="Link" value={item.linkUrl} onChange={(v) => up({ linkUrl: v })} placeholder="/products?category=beauty" />
+            </div>
+          </>
+        )}
+      />
     </div>
   ),
 

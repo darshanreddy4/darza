@@ -4,14 +4,24 @@ import { useState, type FormEvent } from "react";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { IN_STATES } from "@/lib/states";
 import { Alert, Badge, Card, PageHeader, Skeleton, btn, inputCls } from "@/components/admin/ui";
+import { Select } from "@/components/Select";
 
 interface Settings {
-  shippingFeePaise: number; freeShippingOverPaise: number | null; gstEnabled: boolean; gstin: string | null; legalName: string | null;
+  shippingFeePaise: number; freeShippingOverPaise: number | null; freeAllOverPaise: number | null;
+  deliveryZones: { name: string; pincodes: string[]; feePaise: number; freeOverPaise: number | null }[];
+  giftTiers: { atPaise: number; title: string; kind?: "PERCENT"; percent?: number; maxPaise?: number }[];
+  gstEnabled: boolean; gstin: string | null; legalName: string | null;
   businessAddress: string | null; businessState: string | null; shippingGstPercent: number; invoicePrefix: string; nextInvoiceNo: number; returnWindowDays: number; lowStockThreshold: number; alertEmail: string | null; reportSchedule: "OFF" | "WEEKLY" | "MONTHLY"; reportEmail: string | null; reportLastSentAt: string | null;
 }
 
 const toRupees = (paise: number | null) => (paise === null ? "" : String(paise / 100));
 const toPaise = (rupees: string) => Math.round(Number(rupees) * 100);
+
+interface ZoneRow { name: string; pincodes: string; fee: string; freeOn: boolean; freeOver: string }
+interface GiftRow { at: string; title: string; kind: "GIFT" | "PERCENT"; percent: string; max: string }
+
+// Each PIN code start is 1 to 6 digits, separated by commas, spaces or new lines.
+const splitPins = (text: string) => [...new Set(text.split(/[\s,]+/).filter(Boolean))];
 
 export default function SettingsPage() {
   const settings = useAdminQuery<Settings>("/admin/settings");
@@ -29,6 +39,10 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
   const [fee, setFee] = useState(toRupees(initial.shippingFeePaise));
   const [freeOn, setFreeOn] = useState(initial.freeShippingOverPaise !== null);
   const [freeOver, setFreeOver] = useState(toRupees(initial.freeShippingOverPaise ?? 49900));
+  const [freeAllOn, setFreeAllOn] = useState(initial.freeAllOverPaise !== null);
+  const [freeAll, setFreeAll] = useState(toRupees(initial.freeAllOverPaise ?? 150000));
+  const [zones, setZones] = useState<ZoneRow[]>(initial.deliveryZones.map((z) => ({ name: z.name, pincodes: z.pincodes.join(", "), fee: toRupees(z.feePaise), freeOn: z.freeOverPaise !== null, freeOver: toRupees(z.freeOverPaise ?? 99900) })));
+  const [gifts, setGifts] = useState<GiftRow[]>(initial.giftTiers.map((g) => ({ at: toRupees(g.atPaise), title: g.kind === "PERCENT" ? "" : g.title, kind: g.kind === "PERCENT" ? "PERCENT" : "GIFT", percent: g.percent ? String(g.percent) : "", max: g.maxPaise ? toRupees(g.maxPaise) : "" })));
   const [gstEnabled, setGstEnabled] = useState(initial.gstEnabled);
   const [gstin, setGstin] = useState(initial.gstin ?? "");
   const [legalName, setLegalName] = useState(initial.legalName ?? "");
@@ -51,6 +65,20 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
     setError(""); setNotice("");
     if (!Number.isFinite(Number(fee)) || Number(fee) < 0) return setError("Enter a valid delivery fee");
     if (freeOn && (!Number.isFinite(Number(freeOver)) || Number(freeOver) <= 0)) return setError("Enter the order amount above which delivery is free");
+    if (freeAllOn && (!Number.isFinite(Number(freeAll)) || Number(freeAll) <= 0)) return setError("Enter the order amount above which everything ships free");
+    for (const z of zones) {
+      const pins = splitPins(z.pincodes);
+      if (!z.name.trim()) return setError("Give each delivery area a name");
+      if (pins.length === 0 || pins.some((p) => !/^[1-9]\d{0,5}$/.test(p))) return setError(`${z.name.trim()}: PIN code starts must be 1 to 6 digits, separated by commas`);
+      if (!Number.isFinite(Number(z.fee)) || Number(z.fee) < 0 || z.fee === "") return setError(`${z.name.trim()}: enter a valid delivery fee`);
+      if (z.freeOn && (!Number.isFinite(Number(z.freeOver)) || Number(z.freeOver) <= 0)) return setError(`${z.name.trim()}: enter the amount above which delivery is free`);
+    }
+    for (const g of gifts) {
+      if (!Number.isFinite(Number(g.at)) || Number(g.at) <= 0) return setError(`${g.kind === "PERCENT" ? "A percentage reward" : g.title.trim() || "A gift"}: enter the order amount that earns it`);
+      if (g.kind === "GIFT" && !g.title.trim()) return setError("Describe each gift");
+      if (g.kind === "PERCENT" && (!Number.isInteger(Number(g.percent)) || Number(g.percent) < 1 || Number(g.percent) > 90)) return setError("A percentage reward needs a whole percentage from 1 to 90");
+      if (g.kind === "PERCENT" && g.max && (!Number.isFinite(Number(g.max)) || Number(g.max) < 0)) return setError("Enter a valid maximum discount");
+    }
     if (!Number.isInteger(Number(returnDays)) || Number(returnDays) < 0 || Number(returnDays) > 90) return setError("Return window must be a whole number of days from 0 to 90");
     if (reportSchedule !== "OFF" && !reportEmail.trim()) return setError("Add the email address the sales report should go to");
     if (!Number.isInteger(Number(lowStock)) || Number(lowStock) < 0 || Number(lowStock) > 1000) return setError("Low stock level must be a whole number from 0 to 1000");
@@ -59,7 +87,11 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
       await call("/admin/settings", {
         method: "PUT",
         body: JSON.stringify({
-          shippingFeePaise: toPaise(fee), freeShippingOverPaise: freeOn ? toPaise(freeOver) : 0,
+          shippingFeePaise: toPaise(fee), freeShippingOverPaise: freeOn ? toPaise(freeOver) : 0, freeAllOverPaise: freeAllOn ? toPaise(freeAll) : 0,
+          deliveryZones: zones.map((z) => ({ name: z.name.trim(), pincodes: splitPins(z.pincodes), feePaise: toPaise(z.fee), freeOverPaise: z.freeOn ? toPaise(z.freeOver) : 0 })),
+          giftTiers: gifts.map((g) => (g.kind === "PERCENT"
+            ? { atPaise: toPaise(g.at), title: `${Number(g.percent)}% off your order`, kind: "PERCENT", percent: Number(g.percent), maxDiscountPaise: g.max ? toPaise(g.max) : 0 }
+            : { atPaise: toPaise(g.at), title: g.title.trim() })),
           gstEnabled, gstin: gstin.trim().toUpperCase(), legalName: legalName.trim(), businessAddress: address.trim(), businessState: state,
           shippingGstPercent: Number(shipGst), invoicePrefix: prefix.trim().toUpperCase(), returnWindowDays: Number(returnDays), lowStockThreshold: Number(lowStock), alertEmail: alertEmail.trim(), reportSchedule, reportEmail: reportEmail.trim(),
         }),
@@ -95,13 +127,98 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
           </label>
           <label className="flex items-start gap-3">
             <input type="checkbox" checked={freeOn} onChange={(e) => setFreeOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
-            <span><span className="font-medium">Free delivery on bigger orders</span><br /><span className="text-xs text-muted">Measured after any coupon discount.</span></span>
+            <span><span className="font-medium">Free delivery on bigger orders</span><br /><span className="text-xs text-muted">Measured on the cart value before any coupon.</span></span>
           </label>
           {freeOn && (
             <label className={`${label} ml-7`}>Free delivery for orders of ₹ or more
               <input type="number" min={1} step="0.01" value={freeOver} onChange={(e) => setFreeOver(e.target.value)} className={`${inputCls} mt-1.5 !w-40`} />
             </label>
           )}
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={freeAllOn} onChange={(e) => setFreeAllOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span><span className="font-medium">Free delivery on everything for very big orders</span><br /><span className="text-xs text-muted">Waives every delivery charge, heavy or bulky items and areas with their own fee included. Measured on the cart value before any coupon.</span></span>
+          </label>
+          {freeAllOn && (
+            <label className={`${label} ml-7`}>Everything ships free for orders of ₹ or more
+              <input type="number" min={1} step="0.01" value={freeAll} onChange={(e) => setFreeAll(e.target.value)} className={`${inputCls} mt-1.5 !w-40`} />
+            </label>
+          )}
+          <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
+            The free-delivery amount above is measured on the whole basket, but it only waives the charge on regular products. A product marked &ldquo;always charge delivery&rdquo; (set on its edit page) is still charged its own delivery in a big order,
+            until the whole order reaches the free-everything amount. Products marked &ldquo;always free&rdquo; never add to the charge.
+          </p>
+        </div>
+      </Card>
+
+      <Card title="Delivery by area" description="Areas that pay a different delivery fee, picked by the first digits of the customer's PIN code. Leave empty to charge the same everywhere.">
+        <div className="space-y-4 text-sm">
+          {zones.map((z, i) => (
+            <fieldset key={i} className="space-y-3 rounded-xl border border-line p-4" aria-label={`Delivery area ${i + 1}`}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={label}>Area name
+                  <input aria-label="Area name" value={z.name} maxLength={60} onChange={(e) => setZones((l) => l.map((x, n) => (n === i ? { ...x, name: e.target.value } : x)))} placeholder="North East" className={`${inputCls} mt-1.5`} />
+                </label>
+                <label className={label}>Delivery fee (₹)
+                  <input aria-label="Area delivery fee" type="number" min={0} step="0.01" value={z.fee} onChange={(e) => setZones((l) => l.map((x, n) => (n === i ? { ...x, fee: e.target.value } : x)))} className={`${inputCls} mt-1.5`} />
+                </label>
+                <label className={`${label} sm:col-span-2`}>PIN codes starting with
+                  <input aria-label="PIN codes starting with" value={z.pincodes} onChange={(e) => setZones((l) => l.map((x, n) => (n === i ? { ...x, pincodes: e.target.value } : x)))} placeholder="78, 79, 744" className={`${inputCls} mt-1.5 font-mono`} />
+                  <span className={hint}>One to six digits each, separated by commas. 79 means every PIN code that begins 79; a longer start such as 795001 wins over a shorter one.</span>
+                </label>
+              </div>
+              <label className="flex items-center gap-3">
+                <input type="checkbox" checked={z.freeOn} onChange={(e) => setZones((l) => l.map((x, n) => (n === i ? { ...x, freeOn: e.target.checked } : x)))} className="h-4 w-4 accent-emerald-600" />
+                <span>Free delivery here for bigger orders</span>
+              </label>
+              {z.freeOn && (
+                <label className={`${label} ml-7`}>Free for orders of ₹ or more
+                  <input aria-label="Area free delivery amount" type="number" min={1} step="0.01" value={z.freeOver} onChange={(e) => setZones((l) => l.map((x, n) => (n === i ? { ...x, freeOver: e.target.value } : x)))} className={`${inputCls} mt-1.5 !w-40`} />
+                </label>
+              )}
+              <button type="button" onClick={() => setZones((l) => l.filter((_, n) => n !== i))} className={btn.danger}>Remove area</button>
+            </fieldset>
+          ))}
+          {zones.length < 20 && <button type="button" onClick={() => setZones((l) => [...l, { name: "", pincodes: "", fee: fee || "0", freeOn: false, freeOver: "999" }])} className={btn.secondary}>Add a delivery area</button>}
+        </div>
+      </Card>
+
+      <Card title="Rewards for big orders" description="Shown to customers on a progress line at the top of the cart and checkout, with a little celebration when they unlock one. Add a free gift, a percentage off the whole order, or both at different amounts.">
+        <div className="space-y-3 text-sm">
+          {gifts.map((g, i) => (
+            <div key={i} className="flex flex-wrap items-end gap-3 rounded-xl border border-line p-3">
+              <label className={label}>Reward
+                <Select aria-label="Reward type" value={g.kind} onChange={(e) => setGifts((l) => l.map((x, n) => (n === i ? { ...x, kind: e.target.value as GiftRow["kind"] } : x)))} className={`${inputCls} mt-1.5 !w-56`}>
+                  <option value="GIFT">Free gift or surprise</option>
+                  <option value="PERCENT">Percentage off the order</option>
+                </Select>
+              </label>
+              <label className={label}>Order of ₹ or more
+                <input aria-label="Gift order amount" type="number" min={1} step="0.01" value={g.at} onChange={(e) => setGifts((l) => l.map((x, n) => (n === i ? { ...x, at: e.target.value } : x)))} className={`${inputCls} mt-1.5 !w-36`} />
+              </label>
+              {g.kind === "GIFT" ? (
+                <label className={`${label} min-w-48 flex-1`}>Gift
+                  <input aria-label="Gift" value={g.title} maxLength={60} onChange={(e) => setGifts((l) => l.map((x, n) => (n === i ? { ...x, title: e.target.value } : x)))} placeholder="Free surprise gift" className={`${inputCls} mt-1.5`} />
+                </label>
+              ) : (
+                <>
+                  <label className={label}>Percentage off
+                    <input aria-label="Percentage off" type="number" min={1} max={90} step={1} value={g.percent} onChange={(e) => setGifts((l) => l.map((x, n) => (n === i ? { ...x, percent: e.target.value } : x)))} className={`${inputCls} mt-1.5 !w-28`} />
+                  </label>
+                  <label className={label}>Up to (₹) <span className="font-normal text-muted">optional</span>
+                    <input aria-label="Maximum reward discount" type="number" min={0} step="0.01" value={g.max} onChange={(e) => setGifts((l) => l.map((x, n) => (n === i ? { ...x, max: e.target.value } : x)))} className={`${inputCls} mt-1.5 !w-32`} />
+                  </label>
+                </>
+              )}
+              <button type="button" onClick={() => setGifts((l) => l.filter((_, n) => n !== i))} className={btn.danger}>Remove</button>
+            </div>
+          ))}
+          {gifts.length < 8 && (
+            <div className="flex flex-wrap gap-3">
+              <button type="button" onClick={() => setGifts((l) => [...l, { at: "", title: "", kind: "GIFT", percent: "", max: "" }])} className={btn.secondary}>Add a gift</button>
+              <button type="button" onClick={() => setGifts((l) => [...l, { at: "", title: "", kind: "PERCENT", percent: "5", max: "" }])} className={btn.secondary}>Add a percentage off</button>
+            </div>
+          )}
+          <p className={hint}>Gifts are listed on each order in Orders so you can pack them. A percentage off is taken from the order automatically (the best one reached applies, they do not add up) before any coupon. Free delivery and rewards are measured on the cart value before any coupon.</p>
         </div>
       </Card>
 
@@ -128,11 +245,11 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
       <Card title="Sales report by email" description="A summary of the last week or month with the full order list (including GST) attached as a spreadsheet.">
         <div className="grid gap-4 text-sm sm:grid-cols-2">
           <label className={label}>How often
-            <select value={reportSchedule} onChange={(e) => setReportSchedule(e.target.value as Settings["reportSchedule"])} className={`${inputCls} mt-1.5`}>
+            <Select value={reportSchedule} onChange={(e) => setReportSchedule(e.target.value as Settings["reportSchedule"])} className={`${inputCls} mt-1.5`}>
               <option value="OFF">Never</option>
               <option value="WEEKLY">Every Monday, for the week before</option>
               <option value="MONTHLY">On the 1st, for the month before</option>
-            </select>
+            </Select>
           </label>
           <label className={label}>Send it to
             <input type="email" value={reportEmail} maxLength={200} onChange={(e) => setReportEmail(e.target.value)} placeholder="accounts@yourshop.com" className={`${inputCls} mt-1.5`} />
@@ -169,16 +286,16 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
                 <textarea value={address} maxLength={300} rows={2} onChange={(e) => setAddress(e.target.value)} className={`${inputCls} mt-1.5`} />
               </label>
               <label className={label}>State
-                <select value={state} onChange={(e) => setState(e.target.value)} className={`${inputCls} mt-1.5`}>
+                <Select value={state} onChange={(e) => setState(e.target.value)} className={`${inputCls} mt-1.5`}>
                   <option value="">Select state</option>
                   {IN_STATES.map((s) => <option key={s}>{s}</option>)}
-                </select>
+                </Select>
                 <span className={hint}>Sales inside this state show CGST + SGST; other states show IGST.</span>
               </label>
               <label className={label}>GST on delivery charges
-                <select value={shipGst} onChange={(e) => setShipGst(e.target.value)} className={`${inputCls} mt-1.5`}>
+                <Select value={shipGst} onChange={(e) => setShipGst(e.target.value)} className={`${inputCls} mt-1.5`}>
                   {[0, 5, 12, 18, 28].map((r) => <option key={r} value={r}>{r}%</option>)}
-                </select>
+                </Select>
               </label>
             </div>
           )}

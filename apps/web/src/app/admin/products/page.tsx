@@ -12,6 +12,7 @@ import { useLowStockThreshold } from "@/lib/attention";
 import { ProductImportPanel } from "@/components/admin/ProductImportPanel";
 import { API_URL } from "@/lib/api";
 import { useBrand } from "@/components/BrandProvider";
+import { Select } from "@/components/Select";
 
 type SortField = "updated" | "created" | "name" | "price" | "stock";
 
@@ -159,15 +160,15 @@ function ProductsAdminPage() {
         <div className="space-y-3 border-b border-line p-4">
           <div className="flex flex-wrap gap-3">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, brand or SKU" className={`${inputCls} max-w-xs`} aria-label="Search products" />
-            <select value={type} onChange={(e) => { setType(e.target.value); if (e.target.value === "AFFILIATE") setStock(""); }} className={`${inputCls} !w-auto`} aria-label="Filter by type">
+            <Select value={type} onChange={(e) => { setType(e.target.value); if (e.target.value === "AFFILIATE") setStock(""); }} className={`${inputCls} !w-auto`} aria-label="Filter by type">
               <option value="">All types</option><option value="OWN">Sold by {brand}</option><option value="AFFILIATE">Affiliate</option>
-            </select>
-            <select value={stock} onChange={(e) => setStock(e.target.value)} disabled={type === "AFFILIATE"} title={type === "AFFILIATE" ? "Stock is only tracked for DMG products" : undefined} className={`${inputCls} !w-auto disabled:opacity-50`} aria-label="Filter by stock">
+            </Select>
+            <Select value={stock} onChange={(e) => setStock(e.target.value)} disabled={type === "AFFILIATE"} title={type === "AFFILIATE" ? "Stock is only tracked for DMG products" : undefined} className={`${inputCls} !w-auto disabled:opacity-50`} aria-label="Filter by stock">
               <option value="">Any stock</option><option value="in">In stock</option><option value="low">Low stock (1–{threshold})</option><option value="out">Out of stock</option>
-            </select>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
+            </Select>
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Filter by status">
               <option value="">All statuses</option><option value="PUBLISHED">Published</option><option value="DRAFT">Draft</option>
-            </select>
+            </Select>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2" role="group" aria-label="Price range in rupees">
@@ -178,9 +179,9 @@ function ProductsAdminPage() {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs font-medium text-muted" htmlFor="sort-field">Sort by</label>
-              <select id="sort-field" value={sort} onChange={(e) => sortBy(e.target.value as SortField)} className={`${inputCls} !w-auto`}>
+              <Select id="sort-field" value={sort} onChange={(e) => sortBy(e.target.value as SortField)} className={`${inputCls} !w-auto`}>
                 {(Object.keys(SORT_LABELS) as SortField[]).map((f) => <option key={f} value={f}>{SORT_LABELS[f]}</option>)}
-              </select>
+              </Select>
               <button type="button" onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))} className={btn.secondary + " !py-2"} aria-label={`Order: ${dir === "asc" ? "ascending" : "descending"}. Click to reverse.`}>
                 {dir === "asc" ? "▲ Ascending" : "▼ Descending"}
               </button>
@@ -238,7 +239,7 @@ function ProductsAdminPage() {
                     </td>
                     <td className={td}>{p.productType === "OWN" ? <span className={(p.stock ?? 0) <= 5 ? "font-semibold text-red-600" : ""}>{p.stock}</span> : <span className="text-muted">—</span>}</td>
                     <td className={td}>
-                      <button onClick={() => update(p, { status: p.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED" }, p.status === "PUBLISHED" ? "Product unpublished" : "Product published")} title="Click to toggle" className="rounded-full">
+                      <button onClick={() => update(p, { status: p.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED" }, p.status === "PUBLISHED" ? "Product unpublished" : "Product published")} title="Click to toggle" className="inline-flex min-h-6 items-center rounded-full">
                         <Badge tone={p.status === "PUBLISHED" ? "green" : "slate"}>{p.status === "PUBLISHED" ? "● Published" : "○ Draft"}</Badge>
                       </button>
                     </td>

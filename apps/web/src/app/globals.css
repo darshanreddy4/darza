@@ -54,3 +54,14 @@ h1, h2, h3, .font-display {
   outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;
 }
+
+@keyframes reward-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+.reward-shimmer { animation: reward-shimmer 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reward-shimmer { animation: none; }
+}

@@ -71,7 +71,7 @@ function CategoryTile({ c, index }: { c: Category & { children?: { name: string 
   const subs = c.children ?? [];
   return (
     <Link
-      href={`/products?category=${c.slug}`}
+      href={`/products?category=${c.slug}`} data-chrome="tile"
       className={`group relative flex flex-col overflow-hidden rounded-2xl bg-linear-to-br ${TILE_STYLES[index % TILE_STYLES.length]} p-6 text-white shadow-card transition hover:-translate-y-1 hover:shadow-lift`}
     >
       <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-white/10 transition group-hover:scale-125" />
@@ -210,7 +210,7 @@ export function TextWidget({ config }: { config: TextConfig }) {
   if (!config.title && !config.body) return null;
   const tone = { plain: "", soft: "rounded-3xl bg-brand-50 p-8 sm:p-12", dark: "rounded-3xl bg-ink p-8 text-white sm:p-12" }[config.tone] ?? "";
   return (
-    <section className={`${tone} ${config.align === "center" ? "text-center" : ""}`}>
+    <section data-chrome={config.tone === "dark" ? "panel" : undefined} className={`${tone} ${config.align === "center" ? "text-center" : ""}`}>
       {config.title && <h2 className="text-3xl font-bold">{config.title}</h2>}
       {config.body && <p className={`mt-3 max-w-3xl whitespace-pre-line leading-relaxed ${config.tone === "dark" ? "text-white/80" : "text-ink-3"} ${config.align === "center" ? "mx-auto" : ""}`}>{config.body}</p>}
     </section>
