@@ -506,6 +506,9 @@ model StoreSettings {
   returnWindowDays      Int       @default(7)
   // Storefront look chosen by the admin: DEFAULT (the original look) or one of the named themes.
   theme                 String    @default("DEFAULT")
+  // Colours and pictures the admin chose for the header, search bar, category bar and footer:
+  // { header: { bg, fg, image, overlay }, search: { bg, fg, button, buttonFg }, nav: { bg, fg }, footer: { bg, fg, image, overlay } }.
+  chromeStyle           Json      @default("{}")
   // Extra currencies shoppers may view prices in (prices are always charged in rupees), the one shown to new visitors,
   // and the exchange rates as { auto: { USD: <units per 1 INR> }, manual: { USD: <units per 1 INR> } }.
   currencyCodes         String[]  @default([])

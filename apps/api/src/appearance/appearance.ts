@@ -27,6 +27,71 @@ export const THEMES = [
 
 export const THEME_KEYS: string[] = THEMES.map((t) => t.key);
 
+// Colours and pictures for the header, search bar, category bar and footer. Only hex colours and our own uploads (or https pictures) are
+// accepted, so nothing the admin types can reach the page as anything but a colour or an image address.
+export interface ChromeSection { bg?: string; fg?: string; image?: string; overlay?: number; button?: string; buttonFg?: string }
+export interface ChromeStyle { header?: ChromeSection; search?: ChromeSection; nav?: ChromeSection; footer?: ChromeSection }
+
+const CHROME_FIELDS: Record<keyof ChromeStyle, { label: string; colors: (keyof ChromeSection)[]; image?: boolean }> = {
+  header: { label: "Header", colors: ["bg", "fg"], image: true },
+  search: { label: "Search bar", colors: ["bg", "fg", "button", "buttonFg"] },
+  nav: { label: "Category bar", colors: ["bg", "fg"] },
+  footer: { label: "Footer", colors: ["bg", "fg"], image: true },
+};
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+// "#1E3A8A" or "#fff" become "#1e3a8a" and "#ffffff"; anything else is not a colour.
+export function hexColour(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+  if (!m) return null;
+  const h = m[1].toLowerCase();
+  return `#${h.length === 3 ? h.split("").map((c) => c + c).join("") : h}`;
+}
+
+const CHROME_IMAGE = /^(\/uploads\/[A-Za-z0-9._-]{1,200}|https:\/\/[^\s"'()<>\\]{1,1900})$/;
+
+function cleanChrome(input: unknown, problems?: string[]): ChromeStyle {
+  const out: ChromeStyle = {};
+  if (!isObject(input)) return out;
+  for (const [section, spec] of Object.entries(CHROME_FIELDS) as [keyof ChromeStyle, (typeof CHROME_FIELDS)[keyof ChromeStyle]][]) {
+    const raw = input[section];
+    if (raw === undefined || raw === null) continue;
+    if (!isObject(raw)) { problems?.push(`${spec.label}: expected colours and a picture.`); continue; }
+    const clean: ChromeSection = {};
+    for (const key of spec.colors) {
+      const v = raw[key];
+      if (v === undefined || v === null || v === "") continue;
+      const hex = hexColour(v);
+      if (hex) (clean as Record<string, string>)[key] = hex; else problems?.push(`${spec.label}: "${String(v).slice(0, 30)}" is not a colour like #1e3a8a.`);
+    }
+    if (spec.image) {
+      const image = raw.image;
+      if (typeof image === "string" && image) {
+        if (CHROME_IMAGE.test(image)) clean.image = image; else problems?.push(`${spec.label}: the picture must be one you uploaded or an https address.`);
+      }
+      const overlay = raw.overlay;
+      if (overlay !== undefined && overlay !== null && overlay !== "") {
+        if (typeof overlay === "number" && Number.isInteger(overlay) && overlay >= 0 && overlay <= 90) clean.overlay = overlay;
+        else problems?.push(`${spec.label}: the picture tint must be a whole number from 0 to 90.`);
+      }
+    }
+    if (Object.keys(clean).length) out[section] = clean;
+  }
+  return out;
+}
+
+// What an admin sends: bad values are reported, not silently dropped.
+export function normaliseChrome(input: unknown): { value: ChromeStyle; problems: string[] } {
+  const problems: string[] = [];
+  const value = cleanChrome(input, problems);
+  return { value, problems };
+}
+
+// What is read back from the database: anything unusable is ignored so a bad row can never break the storefront.
+export const parseChrome = (json: unknown): ChromeStyle => cleanChrome(json);
+
 // Stored as { auto: { USD: units per 1 INR }, manual: { ... } }; manual wins when present.
 export interface StoredRates { auto: Record<string, number>; manual: Record<string, number> }
 

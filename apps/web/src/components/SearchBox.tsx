@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from "react";
 import { API_URL, imgSized } from "@/lib/api";
 import { Money } from "@/lib/currency";
 import { Dropdown } from "./Dropdown";
@@ -9,7 +9,8 @@ import { Dropdown } from "./Dropdown";
 interface Suggestion { name: string; slug: string; image: string | null; pricePaise: number; category: string }
 interface Group { id: string; name: string; slug: string; children: { id: string; name: string; slug: string }[] }
 
-export function SearchBox({ categories }: { categories: Group[] }) {
+// `skin` carries the colours the admin picked for the search bar; without it the bar looks as it always did.
+export function SearchBox({ categories, skin = null }: { categories: Group[]; skin?: CSSProperties | null }) {
   const router = useRouter();
   const listId = useId();
   const wrapper = useRef<HTMLFormElement>(null);
@@ -57,7 +58,7 @@ export function SearchBox({ categories }: { categories: Group[] }) {
   }
 
   return (
-    <form ref={wrapper} action="/products" role="search" onBlur={onBlur} className="relative flex min-w-0 flex-1 rounded-xl bg-white ring-2 ring-transparent focus-within:ring-brand-500">
+    <form ref={wrapper} action="/products" role="search" onBlur={onBlur} style={skin ?? undefined} data-search-custom={skin ? "" : undefined} className="relative flex min-w-0 flex-1 rounded-xl bg-white ring-2 ring-transparent focus-within:ring-brand-500">
       <Dropdown
         name="category" label="Category" value={category} onChange={setCategory} className="hidden md:block"
         buttonClassName="h-full w-36 rounded-l-xl border-r border-line bg-canvas px-3 text-sm text-muted outline-none focus-visible:outline-2 focus-visible:outline-brand-500"

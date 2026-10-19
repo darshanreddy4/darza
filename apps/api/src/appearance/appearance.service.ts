@@ -3,7 +3,7 @@ import { CacheService } from "../cache/cache.service";
 import { PrismaService } from "../prisma.service";
 import { SettingsService } from "../store/settings.service";
 import { UpdateAppearanceDto } from "./appearance.dto";
-import { BASE_CURRENCY, CURRENCY_CODES, effectiveRate, inrPerUnit, parseProviderRates, parseStoredRates, rateFromInrPerUnit, selectionProblem, SUPPORTED_CURRENCIES, THEMES, type StoredRates } from "./appearance";
+import { BASE_CURRENCY, CURRENCY_CODES, effectiveRate, inrPerUnit, normaliseChrome, parseChrome, parseProviderRates, parseStoredRates, rateFromInrPerUnit, selectionProblem, SUPPORTED_CURRENCIES, THEMES, type StoredRates } from "./appearance";
 
 const HOUR = 3_600_000;
 const STALE_MS = 12 * HOUR;
@@ -47,6 +47,7 @@ export class AppearanceService implements OnModuleInit, OnModuleDestroy {
       const offered = options.length > 0;
       return {
         theme: s.theme,
+        chrome: parseChrome(s.chromeStyle),
         currency: offered
           ? { base: BASE_CURRENCY, default: s.currencyDefault === BASE_CURRENCY || options.some((o) => o.code === s.currencyDefault) ? s.currencyDefault : BASE_CURRENCY, options: [{ code: BASE_CURRENCY, name: "Indian rupee", rate: 1 }, ...options] }
           : null,
@@ -60,6 +61,7 @@ export class AppearanceService implements OnModuleInit, OnModuleDestroy {
     return {
       theme: s.theme,
       themes: THEMES,
+      chrome: parseChrome(s.chromeStyle),
       currency: {
         codes: s.currencyCodes,
         default: s.currencyDefault,
@@ -93,10 +95,12 @@ export class AppearanceService implements OnModuleInit, OnModuleDestroy {
     }
     // An offered currency needs some rate, live or typed, or shoppers would see nothing.
     const missing = codes.filter((c) => effectiveRate(stored, c) === null);
+    const chrome = dto.chrome === undefined ? undefined : normaliseChrome(dto.chrome);
+    if (chrome?.problems.length) throw new BadRequestException(chrome.problems);
 
     await this.prisma.storeSettings.update({
       where: { id: "default" },
-      data: { ...(dto.theme && { theme: dto.theme }), currencyCodes: codes, currencyDefault: defaultCode, currencyRates: stored as object },
+      data: { ...(dto.theme && { theme: dto.theme }), ...(chrome && { chromeStyle: chrome.value as object }), currencyCodes: codes, currencyDefault: defaultCode, currencyRates: stored as object },
     });
     await this.cache.invalidate();
     // Newly offered currencies get their live rate straight away.

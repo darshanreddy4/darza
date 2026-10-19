@@ -72,6 +72,7 @@ Admin only. Two things shoppers see, both set here.
 | Control | What it does |
 |---|---|
 | Store look | Choose Default, Minimalism, Maximalism, Glassmorphism, Neumorphism, Flat design, Material design or Editorial design. The whole shopper-facing site changes at once; the admin console keeps its normal look. Default is the store exactly as it was. Click a card, then Save look |
+| Header, search bar and footer | A live preview and, for each part (header, search bar, category bar, footer), a colour picker or a typed colour such as `#1e3a8a`. The header and footer can also have a **picture** (drag in, paste or upload, or give an https address) with a **tint** slider: a layer of the background colour over the picture so the text stays readable. Leave a text colour empty (Auto) and a readable light or dark colour is chosen for you. Hard-to-read pairs are flagged before you save. "Back to standard colours" restores the original look. It works on top of the store look |
 | Currencies offered | Tick the currencies shoppers can view prices in. A switcher appears in the header and prices convert immediately; the choice is remembered on the shopper's device |
 | Currency for new visitors | The currency first-time visitors see |
 | Live rate and your own rate | Rates refresh automatically every few hours (use "Fetch today's rates" to refresh now). Type your own rate for a currency to fix it; leave it empty to follow the live rate |

@@ -98,6 +98,7 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] Legal and grievance details (registered name, GSTIN, grievance officer) set in the admin portal
 - [x] Brand name, logo, tagline, about text, contact details, WhatsApp button, social links; shown across the site, emails and invoices
 - [x] Store look chosen by the admin: default, minimalism, maximalism, glassmorphism, neumorphism, flat, material or editorial design
+- [x] Header, search bar, category bar and footer colours chosen by the admin, with background pictures for the header and footer, automatic readable text and a contrast warning
 - [x] Price currency switcher for shoppers: admin chooses which currencies are offered, live rates refresh automatically, admin can set own rates; display only, charged in rupees
 - [x] Search index status and rebuild
 

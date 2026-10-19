@@ -13,11 +13,16 @@ import { CurrencySwitcher } from "./CurrencySwitcher";
 import { SocialIcon } from "./SocialIcons";
 import { DEFAULT_BRAND, getSite, contactLinks, whatsappUrl } from "@/lib/site-profile";
 import { getBusiness } from "@/lib/business";
+import { getAppearance } from "@/lib/appearance";
+import { barSkin, navSkin, searchSkin, STANDARD } from "@/lib/chrome";
 
 export async function Header() {
-  const [categories, site] = await Promise.all([api<Category[]>("/categories").catch(() => [] as Category[]), getSite()]);
+  const [categories, site, { chrome }] = await Promise.all([api<Category[]>("/categories").catch(() => [] as Category[]), getSite(), getAppearance()]);
   const brand = site.brandName || DEFAULT_BRAND;
   const tree = buildCategoryTree(categories);
+  const bar = barSkin(chrome.header, STANDARD.header);
+  const search = searchSkin(chrome.search);
+  const nav = navSkin(chrome.nav);
 
   return (
     <header className="sticky top-0 z-40">
@@ -26,13 +31,13 @@ export async function Header() {
           <p className="mx-auto max-w-7xl px-4 py-1.5">{fillPlaceholders(site.announcement || DEFAULT_ANNOUNCEMENT, { brand })}</p>
         </div>
       )}
-      <div data-chrome="bar" className="bg-ink">
+      <div data-chrome="bar" data-custom={bar ? "" : undefined} style={bar?.style} className="bg-ink">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:gap-x-6 sm:px-6 md:flex-nowrap">
           <Link href="/" aria-label={`${brand} home`}><Logo logoUrl={site.logoUrl} name={brand} onBadge={site.logoOnBadge} design={site.logoDesign} /></Link>
 
           {/* On a phone the search bar gets its own full-width row under the logo and buttons. */}
           <div className="order-last flex min-w-full md:order-none md:min-w-0 md:flex-1">
-          <SearchBox categories={tree.map((p) => ({ id: p.id, name: p.name, slug: p.slug, children: p.children.map((c) => ({ id: c.id, name: c.name, slug: c.slug })) }))} />
+          <SearchBox skin={search?.style ?? null} categories={tree.map((p) => ({ id: p.id, name: p.name, slug: p.slug, children: p.children.map((c) => ({ id: c.id, name: c.name, slug: c.slug })) }))} />
           </div>
 
           <nav className="ml-auto flex items-center gap-1 sm:gap-2 md:ml-0">
@@ -44,7 +49,7 @@ export async function Header() {
         </div>
       </div>
 
-      <div className="border-b border-line bg-white">
+      <div data-custom-nav={nav ? "" : undefined} style={nav?.style} className="border-b border-line bg-white">
         <nav className="no-scrollbar mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 sm:px-6 lg:flex-wrap lg:overflow-visible" aria-label="Categories">
           <NavLink href="/products">All products</NavLink>
           <NavLink href="/products?type=OWN">Sold by {brand}</NavLink>
@@ -82,14 +87,15 @@ export async function Header() {
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-ink-3 hover:border-brand-500 hover:text-brand-700">
+    <Link href={href} data-nav-link className="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-ink-3 hover:border-brand-500 hover:text-brand-700">
       {children}
     </Link>
   );
 }
 
 export async function Footer() {
-  const [site, biz, legalLinks] = await Promise.all([getSite(), getBusiness(), getLegalLinks()]);
+  const [site, biz, legalLinks, { chrome }] = await Promise.all([getSite(), getBusiness(), getLegalLinks(), getAppearance()]);
+  const skin = barSkin(chrome.footer, STANDARD.footer, true);
   const name = biz.name;
   const links = contactLinks(site, biz.email);
   const social = links.filter((l) => l.key !== "email" && l.key !== "whatsapp");
@@ -97,7 +103,7 @@ export async function Footer() {
   const wa = whatsappUrl(site);
 
   return (
-    <footer data-chrome="footer" className="mt-20 bg-ink text-white/70">
+    <footer data-chrome="footer" data-custom={skin ? "" : undefined} style={skin?.style} className="mt-20 bg-ink text-white/70">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.3fr_1.2fr]">
         <div className="space-y-4">
           <Logo logoUrl={site.logoUrl} name={name} onBadge={site.logoOnBadge} design={site.logoDesign} />

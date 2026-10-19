@@ -4,17 +4,21 @@ import { useState, type FormEvent } from "react";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { themeAttr, type ThemeKey } from "@/lib/appearance";
 import { Alert, Card, PageHeader, Skeleton, btn, inputCls } from "@/components/admin/ui";
+import { ChromeForm } from "@/components/admin/ChromeForm";
+import { useBrand } from "@/components/BrandProvider";
+import type { ChromeStyle } from "@/lib/chrome";
 import { Select } from "@/components/Select";
 
 interface ThemeInfo { key: ThemeKey; name: string; blurb: string }
 interface CurrencyRow { code: string; name: string; liveInrPerUnit: number | null; manualInrPerUnit: number | null }
 interface Appearance {
-  theme: ThemeKey; themes: ThemeInfo[];
+  theme: ThemeKey; themes: ThemeInfo[]; chrome: ChromeStyle;
   currency: { codes: string[]; default: string; updatedAt: string | null; supported: CurrencyRow[] };
 }
 
 export default function AppearancePage() {
   const data = useAdminQuery<Appearance>("/admin/appearance");
+  const brand = useBrand();
   return (
     <>
       <PageHeader title="Appearance and currency" description="Choose the look of your store and the currencies shoppers can view prices in. Only admins can change these." />
@@ -22,6 +26,7 @@ export default function AppearancePage() {
       {data.loading || !data.data ? <Skeleton rows={4} /> : (
         <div className="space-y-6">
           <ThemeForm initial={data.data} onSaved={data.reload} />
+          <ChromeForm initial={data.data.chrome ?? {}} brand={brand} onSaved={data.reload} />
           <CurrencyForm initial={data.data} onSaved={data.reload} />
         </div>
       )}

@@ -259,3 +259,26 @@
   & [class*="from-brand-600"]:not([data-chrome="tile"]) { background-image: none; background-color: #9b1c1c; }
   & .border-line { border-color: #c9c1ae; }
 }
+
+/*
+ * Colours the admin picked for the header and footer (Admin, Appearance). The element carries data-custom and the colours as
+ * variables; every light-on-dark piece inside follows them. Written last, and with the attribute doubled, so it wins over the looks above.
+ */
+[data-custom][data-custom] [class~="text-white"]:not([class*="bg-rose-"]), [data-custom][data-custom] [class*="hover:text-white"]:hover { color: var(--c-fg); }
+[data-custom][data-custom] [class*="text-white/"] { color: var(--c-fg-soft); }
+[data-custom][data-custom] :is([class~="bg-white/10"], [class~="bg-ink-3"]), [data-custom][data-custom] [class~="hover:bg-white/10"]:hover { background-color: var(--c-fg-12); }
+[data-custom][data-custom] [class~="bg-white/5"] { background-color: var(--c-fg-06); }
+[data-custom][data-custom] [class*="border-white/"] { border-color: var(--c-fg-18); }
+[data-custom][data-custom][data-chrome="footer"] > div:last-child { border-color: var(--c-fg-18); }
+[data-custom][data-custom] [class*="hover:bg-brand-500"]:hover { background-color: var(--color-brand-500); color: var(--color-ink); }
+
+/* The search bar. */
+[role="search"][data-search-custom] input::placeholder { color: var(--sb-fg-55); }
+[role="search"][data-search-custom] button[class~="bg-canvas"] { background-color: var(--sb-fg-8); color: var(--sb-fg); border-color: var(--sb-fg-18); }
+[role="search"][data-search-custom] button[aria-label="Search"] { background-color: var(--sb-btn); color: var(--sb-btn-fg); }
+[role="search"][data-search-custom] button[aria-label="Search"]:hover { filter: brightness(0.92); }
+
+/* The category bar under the header. */
+[data-custom-nav] [data-nav-link] { color: var(--nv-fg); }
+[data-custom-nav] [data-nav-link] [class~="text-muted"] { color: var(--nv-fg-60); }
+[data-custom-nav] [data-nav-link]:hover { color: var(--nv-fg); border-bottom-color: var(--nv-fg); }

@@ -23,7 +23,7 @@ test.afterAll(async ({ request }) => {
 test.describe.serial("choosing the store look", () => {
   test("a fresh store has the original look, and only an admin can change it", async ({ request, browser }) => {
     const pub = (await (await request.get(`${API}/appearance`)).json()) as { theme: string; currency: unknown };
-    expect(pub).toEqual({ theme: "DEFAULT", currency: null });
+    expect(pub).toEqual({ theme: "DEFAULT", chrome: {}, currency: null });
 
     const customer = await browser.newContext({ baseURL: WEB, storageState: AUTH_FILES.customer });
     expect((await customer.request.put(`${API}/admin/appearance`, { data: { theme: "GLASS" }, headers: asBrowser })).status()).toBe(403);
