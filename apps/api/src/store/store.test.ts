@@ -66,6 +66,11 @@ test("same-state sales split GST into CGST and SGST", () => {
   assert.equal(inv.lines[1].cgstPaise + inv.lines[1].sgstPaise, 500);
 });
 
+test("each line carries its HSN code, and delivery has none", () => {
+  const inv = buildInvoice({ items: [{ ...items[0], hsnCode: "850440" }, items[1]], discountPaise: 0, shippingPaise: 4900, shippingGstPercent: 18, gstApplied: true, intraState: true });
+  assert.deepEqual(inv.lines.map((l) => l.hsnCode), ["850440", null, null]);
+});
+
 test("other-state sales charge IGST", () => {
   const inv = buildInvoice({ items, discountPaise: 0, shippingPaise: 0, shippingGstPercent: 18, gstApplied: true, intraState: false });
   assert.equal(inv.lines[0].igstPaise, 18000);

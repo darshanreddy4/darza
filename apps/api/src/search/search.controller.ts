@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { PrismaService } from "../prisma.service";
 import { SearchService } from "./search.service";
 
@@ -29,14 +29,14 @@ export class SearchController {
 
   @Get("admin/search/status")
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("settings.manage")
   status() {
     return this.search.status();
   }
 
   @Post("admin/search/reindex")
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("settings.manage")
   reindex() {
     return this.search.reindexAll();
   }

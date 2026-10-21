@@ -88,10 +88,14 @@ export function maskUpi(upi: string): string {
   return `${name.slice(0, 2)}***@${handle}`;
 }
 
-// Pay-on-delivery customers paid cash, so a refund is a transfer the admin makes by hand and then marks as paid.
-export function payoutDue(r: { status: string; refundPaise: number | null; paidOutAt: Date | null }, paymentMethod: string): boolean {
-  return paymentMethod === "COD" && r.status === "REFUNDED" && (r.refundPaise ?? 0) > 0 && !r.paidOutAt;
+// Pay-on-delivery customers paid cash, so a refund is a transfer the admin makes by hand and then marks as paid. A part-paid order sends back what was paid online
+// through the online payment and the rest the same way.
+export function payoutAmount(r: { status: string; refundPaise: number | null; payoutPaise?: number | null; paidOutAt: Date | null }, paymentMethod: string): number {
+  if (r.status !== "REFUNDED" || r.paidOutAt) return 0;
+  if (r.payoutPaise != null) return r.payoutPaise;
+  return paymentMethod === "COD" ? r.refundPaise ?? 0 : 0;
 }
+export const payoutDue = (r: { status: string; refundPaise: number | null; payoutPaise?: number | null; paidOutAt: Date | null }, paymentMethod: string): boolean => payoutAmount(r, paymentMethod) > 0;
 export type ReturnState = "REQUESTED" | "APPROVED" | "REJECTED" | "REFUNDED";
 
 // The state an admin action moves a request to, or null when the action is not allowed from the current state.

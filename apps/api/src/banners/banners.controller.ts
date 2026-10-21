@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Prisma } from "@prisma/client";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { PrismaService } from "../prisma.service";
 import { CacheService } from "../cache/cache.service";
 import { applyBrand } from "../site/brand";
@@ -70,13 +70,13 @@ export class BannersController {
   }
 
   @Get("admin/banners")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   listAdmin() {
     return this.prisma.banner.findMany({ orderBy: [{ position: "asc" }, { createdAt: "desc" }] });
   }
 
   @Get("admin/banners/:id")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   async get(@Param("id") id: string) {
     const b = await this.prisma.banner.findUnique({ where: { id } });
     if (!b) throw new NotFoundException();
@@ -84,7 +84,7 @@ export class BannersController {
   }
 
   @Post("admin/banners")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   async create(@Body() dto: BannerDto) {
     const last = await this.prisma.banner.aggregate({ _max: { position: true } });
     const created = await this.prisma.banner.create({ data: { ...toData(dto), position: (last._max.position ?? -1) + 1 } });
@@ -94,7 +94,7 @@ export class BannersController {
 
   // Persists the admin's drag order: ids in the order they should appear.
   @Put("admin/banners-order")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   async reorder(@Body() dto: ReorderBannersDto) {
     await this.prisma.$transaction(dto.ids.map((id, position) => this.prisma.banner.updateMany({ where: { id }, data: { position } })));
     await this.cache.invalidate();
@@ -102,7 +102,7 @@ export class BannersController {
   }
 
   @Put("admin/banners/:id")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   async update(@Param("id") id: string, @Body() dto: BannerDto) {
     await this.get(id);
     const updated = await this.prisma.banner.update({ where: { id }, data: toData(dto) });
@@ -111,7 +111,7 @@ export class BannersController {
   }
 
   @Delete("admin/banners/:id")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   async remove(@Param("id") id: string) {
     await this.prisma.banner.deleteMany({ where: { id } });
     await this.cache.invalidate();

@@ -46,6 +46,9 @@ export interface Product {
   sale: { endsAt: string } | null;
   // Days after delivery it can be returned; 0 means it cannot be returned.
   returnDays: number;
+  // Must be paid for online in full (no pay on delivery); and the share paid online first when the product is sold with part payment, the rest on delivery.
+  onlineOnly?: boolean;
+  advancePercent?: number | null;
   colorName: string | null;
   warranty: string | null;
   manufacturerInfo: string | null;

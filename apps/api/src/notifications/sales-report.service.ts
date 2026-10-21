@@ -1,6 +1,6 @@
 import { BadRequestException, Controller, HttpCode, Injectable, Logger, OnModuleDestroy, OnModuleInit, Post, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { loadReportData } from "../analytics/report-data";
 import { lastPeriod, reportDue, type ReportPeriod, type ReportSchedule } from "../analytics/report-period";
 import { salesReportCsv, summariseOrders } from "../analytics/sales-report";
@@ -61,7 +61,7 @@ export class SalesReportService implements OnModuleInit, OnModuleDestroy {
 
 @Controller("admin/sales-report")
 @UseGuards(AuthGuard)
-@Roles("ADMIN")
+@Permit("analytics.view")
 export class SalesReportController {
   constructor(private reports: SalesReportService) {}
 

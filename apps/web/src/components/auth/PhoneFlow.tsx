@@ -20,7 +20,7 @@ export const messageOf = (d: { message?: string | string[] }, fallback: string) 
 
 // Mobile number sign-in: enter the number, then the 6-digit code sent by text message.
 // `check` runs before a code is sent, so the sign-up form can insist on a name and the terms first.
-export function PhoneFlow({ purpose, extra, check, afterLogin }: { purpose: "login" | "signup"; extra?: { name?: string; termsAccepted?: boolean }; check?: () => string | null; afterLogin?: (user: AuthUser) => string }) {
+export function PhoneFlow({ purpose, extra, check, afterLogin }: { purpose: "login" | "signup" | "guest"; extra?: { name?: string; termsAccepted?: boolean }; check?: () => string | null; afterLogin?: (user: AuthUser) => string }) {
   const { login } = useAuth();
   const router = useRouter();
   const [phone, setPhone] = useState("");
@@ -87,7 +87,7 @@ export function PhoneFlow({ purpose, extra, check, afterLogin }: { purpose: "log
           />
         </Field>
         <ErrorNote>{error}</ErrorNote>
-        <button disabled={busy || code.length !== 6} className={primaryButton}>{busy ? "Checking…" : purpose === "signup" ? "Verify and create account" : "Verify and log in"}</button>
+        <button disabled={busy || code.length !== 6} className={primaryButton}>{busy ? "Checking…" : purpose === "signup" ? "Verify and create account" : purpose === "guest" ? "Verify and continue" : "Verify and log in"}</button>
         <div className="flex items-center justify-between text-sm">
           <button type="button" onClick={() => { setStep("number"); setError(""); setNote(""); }} className="font-semibold text-brand-700 hover:underline">Change number</button>
           {wait > 0

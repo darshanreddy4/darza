@@ -96,6 +96,8 @@ export function ProductCard({ product }: { product: Product }) {
         {product.multiBuy && <p className="text-xs font-semibold text-green-800">{multiBuyText(product.multiBuy)}</p>}
         {!own && <p className="text-[11px] text-muted">Purchase completes on {product.platform}</p>}
         {own && product.inStock === false && <p className="text-[11px] font-medium text-red-600">Out of stock</p>}
+        {own && product.onlineOnly && <p className="text-[11px] font-medium text-ink-3">Online payment only</p>}
+        {own && !product.onlineOnly && !!product.advancePercent && <p className="text-[11px] font-medium text-ink-3">Pay {product.advancePercent}% now, rest on delivery</p>}
         {own && product.deliveryBy && (
           <p className="text-xs text-ink-3">{product.freeDelivery ? "FREE delivery " : "Delivery by "}<strong>{formatDeliveryDate(product.deliveryBy)}</strong></p>
         )}

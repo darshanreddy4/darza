@@ -10,12 +10,13 @@ export class RegisterDto {
 
 export class SendOtpDto {
   @IsString() @MaxLength(30) phone!: string;
-  @IsIn(["login", "signup"]) purpose!: "login" | "signup";
+  // "guest" is for checking out with just a mobile number.
+  @IsIn(["login", "signup", "guest"]) purpose!: "login" | "signup" | "guest";
 }
 
 export class VerifyOtpDto {
   @IsString() @MaxLength(30) phone!: string;
-  @IsIn(["login", "signup"]) purpose!: "login" | "signup";
+  @IsIn(["login", "signup", "guest"]) purpose!: "login" | "signup" | "guest";
   @IsString() @Matches(/^\d{6}$/, { message: "Enter the 6-digit code" }) code!: string;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(100) name?: string;
   @IsOptional() termsAccepted?: boolean;

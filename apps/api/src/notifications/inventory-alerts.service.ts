@@ -23,9 +23,10 @@ export class InventoryAlertsService implements OnModuleInit, OnModuleDestroy {
 
   // One email lists everything that has newly dropped to the threshold; a product is mentioned again only after its stock has recovered and dropped again.
   async run() {
-    const { lowStockThreshold, alertEmail } = await this.settings.get();
-    // Products back above the threshold can be alerted about again next time.
+    const { lowStockThreshold, alertEmail, optionStockAlerts } = await this.settings.get();
+    // Products and options back above the threshold can be alerted about again next time.
     await this.prisma.product.updateMany({ where: { lowStockAlertedAt: { not: null }, stock: { gt: lowStockThreshold } }, data: { lowStockAlertedAt: null } });
+    await this.prisma.productOption.updateMany({ where: { lowStockAlertedAt: { not: null }, stock: { gt: lowStockThreshold } }, data: { lowStockAlertedAt: null } });
     if (!alertEmail) return 0;
 
     const low = await this.prisma.product.findMany({
@@ -34,19 +35,31 @@ export class InventoryAlertsService implements OnModuleInit, OnModuleDestroy {
       orderBy: [{ stock: "asc" }, { name: "asc" }],
       take: 200,
     });
-    if (low.length === 0) return 0;
+    // An option running low while its product still has plenty; a low product already covers its options.
+    const lowOptions = optionStockAlerts ? await this.prisma.productOption.findMany({
+      where: { stock: { lte: lowStockThreshold }, lowStockAlertedAt: null, product: { productType: "OWN", status: "PUBLISHED", stock: { gt: lowStockThreshold } } },
+      select: { id: true, label: true, sku: true, stock: true, product: { select: { name: true, sku: true } } },
+      orderBy: [{ stock: "asc" }],
+      take: 200,
+    }) : [];
+    if (low.length + lowOptions.length === 0) return 0;
 
     // Claimed first, so two API instances never send the same digest twice.
-    const claimed = await this.prisma.product.updateMany({ where: { id: { in: low.map((p) => p.id) }, lowStockAlertedAt: null }, data: { lowStockAlertedAt: new Date() } });
-    if (claimed.count === 0) return 0;
+    const claimed = low.length ? await this.prisma.product.updateMany({ where: { id: { in: low.map((p) => p.id) }, lowStockAlertedAt: null }, data: { lowStockAlertedAt: new Date() } }) : { count: 0 };
+    const claimedOptions = lowOptions.length ? await this.prisma.productOption.updateMany({ where: { id: { in: lowOptions.map((o) => o.id) }, lowStockAlertedAt: null }, data: { lowStockAlertedAt: new Date() } }) : { count: 0 };
+    if (claimed.count + claimedOptions.count === 0) return 0;
+    const items = [
+      ...low.map((p) => ({ name: p.name, sku: p.sku, stock: p.stock ?? 0 })),
+      ...lowOptions.map((o) => ({ name: `${o.product.name} (${o.label})`, sku: o.sku ?? o.product.sku, stock: o.stock })),
+    ];
     try {
       await this.mail.send({
         to: alertEmail,
-        ...lowStockMail({ brand: await this.site.brandName(), threshold: lowStockThreshold, items: low.map((p) => ({ name: p.name, sku: p.sku, stock: p.stock ?? 0 })), url: `${await this.site.webOrigin()}/admin/attention` }),
+        ...lowStockMail({ brand: await this.site.brandName(), threshold: lowStockThreshold, items, url: `${await this.site.webOrigin()}/admin/attention` }),
       });
     } catch (e) {
       this.log.warn(`Could not send the low-stock email: ${(e as Error).message}`);
     }
-    return low.length;
+    return items.length;
   }
 }

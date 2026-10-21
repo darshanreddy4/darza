@@ -15,6 +15,7 @@ import { productReturnDays } from "./return-policy";
 import { activeSale, validateSale } from "./sale";
 import { planBulkPatch, validateBulkChanges } from "./bulk-update";
 import { publicOptions, shapeOptions, summariseOptions } from "./product-options";
+import { recordDifferences, snapshotStock } from "../inventory/ledger";
 import type { BulkUpdateProductsDto } from "./bulk-update.dto";
 
 export interface ListQuery {
@@ -34,14 +35,16 @@ type Rating = { avg: number; count: number };
 const PUBLIC_TTL = 30;
 
 // Hides the raw affiliate URL (clicks go through /go/:slug), SKU, cost and exact stock.
-function toPublic(p: ProductWithImages, rating: Rating | undefined, brand: string, lowStockThreshold: number, unitsSold: number, storeReturnDays: number) {
-  const { sku, stock, affiliateUrl, status, costPaise, multiBuyQty, multiBuyPercent, showSold, salePricePaise, saleEndsAt, options, ...rest } = p;
+function toPublic(p: ProductWithImages, rating: Rating | undefined, brand: string, lowStockThreshold: number, unitsSold: number, storeReturnDays: number, advanceEnabled: boolean) {
+  const { sku, stock, affiliateUrl, status, costPaise, multiBuyQty, multiBuyPercent, showSold, salePricePaise, saleEndsAt, options, advancePercent, ...rest } = p;
   const sale = activeSale(p);
   // Our own products are sold under the brand name unless the admin typed another seller.
   return applyBrand({
     ...rest,
     // Sizes or weights to choose from: no cost or exact stock. The product's own price is the lowest of them.
     options: publicOptions(options),
+    // The share paid online first, shown only while the store offers part payment.
+    advancePercent: advanceEnabled && !p.onlineOnly && p.productType === "OWN" ? advancePercent : null,
     // While a sale runs the sale price is the price, and the normal price is shown struck through when there is no MRP.
     pricePaise: sale ? sale.pricePaise : p.pricePaise,
     mrpPaise: p.mrpPaise ?? (sale ? p.pricePaise : null),
@@ -107,13 +110,13 @@ export class ProductsService {
         where: { productId: { in: ids }, order: { status: { in: [...SOLD_ORDER_STATUSES] } } },
         _sum: { quantity: true, returnedQty: true },
       }),
-      this.prisma.storeSettings.findUnique({ where: { id: "default" }, select: { lowStockThreshold: true, returnWindowDays: true } }),
+      this.prisma.storeSettings.findUnique({ where: { id: "default" }, select: { lowStockThreshold: true, returnWindowDays: true, advanceEnabled: true } }),
       this.site.brandName(),
     ]);
     const byId = new Map(groups.map((g) => [g.productId, { avg: g._avg.rating ?? 0, count: g._count._all }]));
     const sold = new Map(sales.map((s) => [s.productId, (s._sum.quantity ?? 0) - (s._sum.returnedQty ?? 0)]));
     const threshold = settings?.lowStockThreshold ?? 5;
-    return products.map((p) => toPublic(p, byId.get(p.id), brand, threshold, sold.get(p.id) ?? 0, settings?.returnWindowDays ?? 7));
+    return products.map((p) => toPublic(p, byId.get(p.id), brand, threshold, sold.get(p.id) ?? 0, settings?.returnWindowDays ?? 7, settings?.advanceEnabled ?? false));
   }
 
   getPublic(slug: string) {
@@ -247,10 +250,13 @@ export class ProductsService {
     return p;
   }
 
-  async create(dto: ProductDto) {
+  async create(dto: ProductDto, actorId?: string) {
     const data = this.normalise(dto);
     try {
+      await this.assertFreeSkus(this.prisma, null, dto.sku, this.optionRows(dto));
+      await this.assertProductSkuFree(this.prisma, null, dto.sku);
       const created = await this.prisma.product.create({ data: { ...data, options: { create: this.optionRows(dto) } }, include: withImages });
+      await recordDifferences(this.prisma, new Map(), await snapshotStock(this.prisma, [created.id]), { reason: "RECEIVED", note: "Opening stock", actorId });
       await this.search.sync(created.id);
       await this.cache.invalidate();
       return created;
@@ -259,21 +265,27 @@ export class ProductsService {
     }
   }
 
-  async update(id: string, input: ProductDto) {
+  async update(id: string, input: ProductDto, actorId?: string) {
     const existing = await this.getAdmin(id);
     // Edits that don't mention options (a quick publish toggle, a CSV import) keep the ones the product has.
     const dto = input.options === undefined && existing.options.length
-      ? { ...input, optionNames: existing.optionNames, options: existing.options.map((o) => ({ id: o.id, label: o.label, values: o.values, imageUrl: o.imageUrl ?? undefined, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise ?? undefined, stock: o.stock, costPaise: o.costPaise ?? undefined })) } as ProductDto
+      ? { ...input, optionNames: existing.optionNames, options: existing.options.map((o) => ({ id: o.id, label: o.label, values: o.values, imageUrl: o.imageUrl ?? undefined, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise ?? undefined, stock: o.stock, costPaise: o.costPaise ?? undefined, sku: o.sku ?? undefined, weightGrams: o.weightGrams ?? undefined })) } as ProductDto
       : input;
     const { images, ...data } = this.normalise(dto);
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
-        await this.syncOptions(tx, id, existing.options.map((o) => o.id), this.optionRows(dto, existing.options.map((o) => o.id)));
-        return tx.product.update({
+        const before = await snapshotStock(tx, [id]);
+        const rows = this.optionRows(dto, existing.options.map((o) => o.id));
+        await this.assertFreeSkus(tx, id, dto.sku, rows);
+        await this.assertProductSkuFree(tx, id, dto.sku);
+        await this.syncOptions(tx, id, existing.options.map((o) => o.id), rows);
+        const saved = await tx.product.update({
           where: { id },
           data: { ...data, images: { deleteMany: {}, create: images.create } },
           include: withImages,
         });
+        await recordDifferences(tx, before, await snapshotStock(tx, [id]), { reason: "EDIT", note: "Product edited", actorId });
+        return saved;
       });
       await this.search.sync(id);
       await this.cache.invalidate();
@@ -283,12 +295,39 @@ export class ProductsService {
     }
   }
 
+  // Writes a product's options inside a transaction; the spreadsheet import uses it.
+  async saveOptions(tx: Prisma.TransactionClient, productId: string, knownIds: string[], dto: ProductDto) {
+    const rows = this.optionRows(dto, knownIds);
+    await this.assertFreeSkus(tx, productId, dto.sku, rows);
+    return this.syncOptions(tx, productId, knownIds, rows);
+  }
+
+  // A product SKU must not already be the SKU of an option of another product.
+  async assertProductSkuFree(db: Prisma.TransactionClient, productId: string | null, sku: string | undefined) {
+    if (!sku) return;
+    const used = await db.productOption.findFirst({ where: { sku: { equals: sku, mode: "insensitive" }, ...(productId && { productId: { not: productId } }) }, select: { sku: true } });
+    if (used) throw new BadRequestException(`The SKU ${used.sku} is already used by an option of another product`);
+  }
+
+  // An option SKU must not be on another product or option, nor the product's own SKU.
+  private async assertFreeSkus(db: Prisma.TransactionClient, productId: string | null, productSku: string | undefined, rows: { sku: string | null }[]) {
+    const skus = rows.map((r) => r.sku).filter((s): s is string => !!s);
+    if (skus.length === 0) return;
+    if (productSku && skus.some((s) => s.toLowerCase() === productSku.toLowerCase())) throw new BadRequestException(`An option SKU cannot be the same as the product's SKU (${productSku})`);
+    const [asProduct, asOption] = await Promise.all([
+      db.product.findFirst({ where: { sku: { in: skus, mode: "insensitive" }, ...(productId && { id: { not: productId } }) }, select: { sku: true } }),
+      db.productOption.findFirst({ where: { sku: { in: skus, mode: "insensitive" }, ...(productId && { productId: { not: productId } }) }, select: { sku: true } }),
+    ]);
+    const taken = asProduct?.sku ?? asOption?.sku;
+    if (taken) throw new BadRequestException(`The SKU ${taken} is already used by another product or option`);
+  }
+
   // The options as stored; an id the product doesn't have is treated as a new option.
   private optionRows(dto: ProductDto, knownIds: string[] = []) {
     if (dto.productType === "AFFILIATE") return [];
     return shapeOptions(dto.optionNames, dto.options ?? []).options.map((o, position) => ({
       id: o.id && knownIds.includes(o.id) ? o.id : undefined,
-      label: o.label, values: o.values, imageUrl: o.imageUrl, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise, stock: o.stock, costPaise: o.costPaise, position,
+      label: o.label, values: o.values, imageUrl: o.imageUrl, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise, stock: o.stock, costPaise: o.costPaise, sku: o.sku, weightGrams: o.weightGrams, position,
     }));
   }
 
@@ -304,7 +343,7 @@ export class ProductsService {
   }
 
   // Applies one change to many products at once; all updates commit together or not at all.
-  async bulkUpdate(dto: BulkUpdateProductsDto) {
+  async bulkUpdate(dto: BulkUpdateProductsDto, actorId?: string) {
     const problems = validateBulkChanges(dto.changes);
     if (problems.length) throw new BadRequestException(problems);
 
@@ -329,7 +368,12 @@ export class ProductsService {
     };
     if (dto.dryRun) return { ...summary, dryRun: true };
 
-    await this.prisma.$transaction(toUpdate.map((p) => this.prisma.product.update({ where: { id: p.row.id }, data: p.patch })));
+    await this.prisma.$transaction(async (tx) => {
+      const ids = toUpdate.map((p) => p.row.id);
+      const before = await snapshotStock(tx, ids);
+      for (const p of toUpdate) await tx.product.update({ where: { id: p.row.id }, data: p.patch });
+      await recordDifferences(tx, before, await snapshotStock(tx, ids), { reason: "EDIT", note: "Bulk edit", actorId });
+    });
 
     // The search index holds price, featured and publish state.
     if (toUpdate.length > 25) await this.search.reindexAll();
@@ -379,6 +423,7 @@ export class ProductsService {
     const problems = [...validateProductRules({ ...dto, pricePaise, mrpPaise, stock }), ...validateSale({ pricePaise, salePricePaise, saleEndsAt }), ...shaped.errors];
     if (isAffiliate && dto.options?.length) problems.push("Only products sold by the store can have options");
     if (derived && dto.salePricePaise != null) problems.push("A timed sale can't be used on a product with options");
+    if (dto.onlineOnly && dto.advancePercent) problems.push("A product that must be paid for online in full cannot also be part-paid");
     if (dto.chargeDelivery && dto.freeDelivery) problems.push("A product cannot have free delivery and a delivery charge at once");
     if (problems.length) throw new BadRequestException(problems);
     const videoUrls = [...new Set(dto.videoUrls ?? [])];
@@ -400,6 +445,9 @@ export class ProductsService {
       deliveryInfo: dto.deliveryInfo ?? null,
       returnPolicy: dto.returnPolicy ?? null,
       gstRatePercent: dto.gstRatePercent ?? 18,
+      hsnCode: isAffiliate ? null : dto.hsnCode?.trim() || null,
+      onlineOnly: !isAffiliate && dto.onlineOnly === true,
+      advancePercent: isAffiliate ? null : dto.advancePercent ?? null,
       showRating: dto.showRating ?? true,
       dealLabel: dto.dealLabel?.trim() || null,
       // Delivery and the cart button only apply to our own products.
@@ -421,6 +469,7 @@ export class ProductsService {
       warranty: dto.warranty?.trim() || null,
       manufacturerInfo: dto.manufacturerInfo?.trim() || null,
       sku: isAffiliate ? null : dto.sku,
+      weightGrams: isAffiliate ? null : dto.weightGrams ?? null,
       stock: isAffiliate ? null : stock,
       optionNames: shaped.names,
       costPaise: isAffiliate ? null : dto.costPaise ?? null,

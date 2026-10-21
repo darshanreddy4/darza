@@ -1,7 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Logger, NotFoundException, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, RequireVerified, Roles, type JwtPayload } from "../auth/auth.guard";
-import { ADMIN_AND_STAFF } from "../auth/permissions";
+import { AuthGuard, Permit, RequireVerified, type JwtPayload } from "../auth/auth.guard";
 import { MailService } from "../mail/mail.service";
 import { questionMail } from "../mail/question-mail";
 import { PrismaService } from "../prisma.service";
@@ -46,7 +45,7 @@ export class QuestionsController {
 
   @Get("admin/questions")
   @UseGuards(AuthGuard)
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("questions.answer")
   adminList(@Query("status") status?: string) {
     return this.prisma.productQuestion.findMany({
       where: status === "open" ? { answer: null } : status === "answered" ? { answer: { not: null } } : undefined,
@@ -58,7 +57,7 @@ export class QuestionsController {
 
   @Patch("admin/questions/:id")
   @UseGuards(AuthGuard)
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("questions.answer")
   async answer(@Param("id") id: string, @Body() dto: AnswerDto) {
     const existing = await this.prisma.productQuestion.findUnique({ where: { id }, include: { user: { select: { name: true, email: true } }, product: { select: { name: true, slug: true } } } });
     if (!existing) throw new NotFoundException();
@@ -72,7 +71,7 @@ export class QuestionsController {
   @Delete("admin/questions/:id")
   @HttpCode(204)
   @UseGuards(AuthGuard)
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("questions.answer")
   async remove(@Param("id") id: string) {
     await this.prisma.productQuestion.deleteMany({ where: { id } });
   }

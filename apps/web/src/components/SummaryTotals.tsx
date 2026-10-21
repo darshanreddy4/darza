@@ -2,7 +2,7 @@ import { Money, CurrencyNote } from "@/lib/currency";
 import type { Quote } from "@/lib/quote";
 
 // Subtotal, discount, delivery and total as priced by the server. The total always shows the rupees that will be charged.
-export function SummaryTotals({ quote, itemCount, fallbackPaise }: { quote: Quote | null; itemCount: number; fallbackPaise: number }) {
+export function SummaryTotals({ quote, itemCount, fallbackPaise, partPayment = false, split }: { quote: Quote | null; itemCount: number; fallbackPaise: number; partPayment?: boolean; split?: { nowLabel: string; nowPaise: number; laterPaise: number } }) {
   const total = quote?.totalPaise ?? fallbackPaise;
   return (
     <>
@@ -25,6 +25,9 @@ export function SummaryTotals({ quote, itemCount, fallbackPaise }: { quote: Quot
           <p className="-mt-1 text-xs text-muted">{quote.delivery.standardPaise > 0 ? <>Includes <Money paise={quote.delivery.specialPaise} /> for heavy or bulky items.</> : "For heavy or bulky items in your basket."}</p>
         )}
         {quote && quote.delivery.freeBecause === "ALL" && <p className="-mt-1 text-xs font-medium text-green-800">Your order is big enough for free delivery on everything.</p>}
+        {quote && quote.codFeePaise > 0 && (
+          <div className="flex justify-between"><dt className="text-muted">Pay on delivery fee</dt><dd><Money paise={quote.codFeePaise} /></dd></div>
+        )}
         {quote && quote.earnedGifts.length > 0 && (
           <div className="flex justify-between gap-3 text-brand-700"><dt>Free gift{quote.earnedGifts.length > 1 ? "s" : ""}</dt><dd className="text-right font-medium">{quote.earnedGifts.join(", ")}</dd></div>
         )}
@@ -39,6 +42,18 @@ export function SummaryTotals({ quote, itemCount, fallbackPaise }: { quote: Quot
         <span className="font-semibold">Total</span>
         <span className="font-display text-2xl font-bold"><Money paise={total} both /></span>
       </div>
+      {partPayment && quote?.advance.available && (
+        <dl className="space-y-1.5 rounded-xl bg-canvas px-3 py-2.5 text-sm">
+          <div className="flex justify-between font-semibold"><dt>Pay now ({quote.advance.percent}%)</dt><dd><Money paise={quote.advance.payNowPaise} /></dd></div>
+          <div className="flex justify-between text-muted"><dt>Pay on delivery</dt><dd><Money paise={quote.advance.balancePaise} /></dd></div>
+        </dl>
+      )}
+      {split && (
+        <dl className="space-y-1.5 rounded-xl bg-canvas px-3 py-2.5 text-sm">
+          <div className="flex justify-between font-semibold"><dt>{split.nowLabel}</dt><dd><Money paise={split.nowPaise} /></dd></div>
+          <div className="flex justify-between text-muted"><dt>Pay on delivery</dt><dd><Money paise={split.laterPaise} /></dd></div>
+        </dl>
+      )}
       <CurrencyNote totalPaise={total} />
     </>
   );

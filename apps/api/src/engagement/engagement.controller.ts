@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, RequireVerified, Roles, type JwtPayload } from "../auth/auth.guard";
+import { AuthGuard, Permit, RequireVerified, type JwtPayload } from "../auth/auth.guard";
 import { PrismaService } from "../prisma.service";
 import { CacheService } from "../cache/cache.service";
 import { ProductsService, withImages } from "../products/products.service";
@@ -131,7 +131,7 @@ export class EngagementController {
 
   @Get("admin/reviews")
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("reviews.moderate")
   adminReviews(@Query("productId") productId?: string) {
     return this.prisma.review.findMany({
       where: productId ? { productId } : undefined,
@@ -144,7 +144,7 @@ export class EngagementController {
   @Delete("admin/reviews/:id")
   @HttpCode(204)
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("reviews.moderate")
   async deleteReview(@Param("id") id: string) {
     await this.prisma.review.deleteMany({ where: { id } });
     await this.cache.invalidate();

@@ -1,8 +1,8 @@
 import { Body, Controller, ForbiddenException, Get, Param, ParseEnumPipe, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ReturnStatus } from "@prisma/client";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, RequireVerified, Roles, type JwtPayload } from "../auth/auth.guard";
-import { ADMIN_AND_STAFF, canDecideReturn } from "../auth/permissions";
+import { AuthGuard, Permit, RequireVerified, type JwtPayload } from "../auth/auth.guard";
+import { canDecideReturn } from "../auth/permissions";
 import { DecideReturnDto, RequestReturnDto } from "./order.dto";
 import { ReturnsService } from "./returns.service";
 
@@ -19,15 +19,15 @@ export class ReturnsController {
   }
 
   @Get("admin/returns")
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("returns.view")
   list(@Query("status", new ParseEnumPipe(ReturnStatus, { optional: true })) status?: ReturnStatus) {
     return this.returns.list(status);
   }
 
   @Patch("admin/returns/:id")
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("returns.decide", "returns.refund")
   decide(@Req() req: { user: JwtPayload }, @Param("id") id: string, @Body() dto: DecideReturnDto) {
-    if (!canDecideReturn(req.user.role, dto.action)) throw new ForbiddenException("Only an admin can refund a return.");
+    if (!canDecideReturn(req.user.permissions, dto.action)) throw new ForbiddenException("Your role cannot do this: refunds need the refund permission, approving or declining needs the decide permission.");
     return this.returns.decide(id, dto);
   }
 }

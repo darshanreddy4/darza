@@ -8,13 +8,15 @@ import { Alert, Badge, Card, btn, inputCls } from "@/components/admin/ui";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 import { VideoLinks } from "@/components/admin/VideoLinks";
 import { useBrand } from "@/components/BrandProvider";
+import { useAuth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { Select } from "@/components/Select";
 import { msUntil } from "@/lib/labels";
 import { PACK_KINDS, PACK_UNITS, formatPack, parsePack, type PackKind } from "@/lib/packSize";
 
 type Row = { k: string; v: string };
 // One version to buy (Black / L, 20W, 5000 mAh), typed in rupees; id is set for an option that already exists, image is one of the product's pictures.
-type OptRow = { id?: string; values: [string, string]; price: string; mrp: string; stock: string; cost: string; image: string };
+type OptRow = { id?: string; values: [string, string]; price: string; mrp: string; stock: string; cost: string; image: string; sku: string; weight: string };
 
 // Only suggestions: the admin can name what the customer chooses anything.
 const KIND_HINTS = ["Size", "Colour", "Capacity", "Wattage", "Storage", "Battery", "Weight", "Pack of"];
@@ -25,6 +27,8 @@ const toRupees = (paise: number | null | undefined) => (paise == null ? "" : Str
 
 export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const storeName = useBrand();
+  // Cost prices are only shown to roles that may see them; the API keeps the saved costs when they are not sent.
+  const seeCosts = can(useAuth().user, "costs.view");
   const router = useRouter();
   const call = useAdminApi();
   const cats = useAdminQuery<AdminCategory[]>("/admin/categories");
@@ -61,6 +65,15 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const [chargeMode, setChargeMode] = useState<"store" | "free" | "charge">(initial?.chargeDelivery ? "charge" : initial?.freeDelivery ? "free" : "store");
   const [chargeFee, setChargeFee] = useState(toRupees(initial?.deliveryFeePaise));
   const [gstRate, setGstRate] = useState(String(initial?.gstRatePercent ?? 18));
+  const [hsn, setHsn] = useState(initial?.hsnCode ?? "");
+  // How customers may pay for it: any way the store offers, online in full only, or part now and the rest on delivery.
+  const settings = useAdminQuery<{ advanceEnabled: boolean; skuWeightEnabled?: boolean }>("/store/config");
+  const advanceOffered = settings.data?.advanceEnabled ?? false;
+  // The store switches weight and per-option SKU fields on in Settings; what was already saved is kept either way.
+  const showSkuWeight = settings.data?.skuWeightEnabled ?? false;
+  const [weight, setWeight] = useState(initial?.weightGrams ? String(initial.weightGrams) : "");
+  const [payMode, setPayMode] = useState<"any" | "online" | "advance">(initial?.onlineOnly ? "online" : initial?.advancePercent ? "advance" : "any");
+  const [advancePercent, setAdvancePercent] = useState(String(initial?.advancePercent ?? 30));
   const firstPack = parsePack(initial?.packSize);
   const [packKind, setPackKind] = useState<PackKind>(firstPack.kind);
   const [packAmount, setPackAmount] = useState(firstPack.amount);
@@ -81,7 +94,7 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const [colorName, setColorName] = useState(initial?.colorName ?? "");
   const [warranty, setWarranty] = useState(initial?.warranty ?? "");
   const [optionNames, setOptionNames] = useState<[string, string]>([initial?.optionNames?.[0] ?? "", initial?.optionNames?.[1] ?? ""]);
-  const [options, setOptions] = useState<OptRow[]>((initial?.options ?? []).map((o) => ({ id: o.id, values: [o.values[0] ?? o.label, o.values[1] ?? ""], price: toRupees(o.pricePaise), mrp: toRupees(o.mrpPaise), stock: String(o.stock), cost: toRupees(o.costPaise), image: o.imageUrl ?? "" })));
+  const [options, setOptions] = useState<OptRow[]>((initial?.options ?? []).map((o) => ({ id: o.id, values: [o.values[0] ?? o.label, o.values[1] ?? ""], price: toRupees(o.pricePaise), mrp: toRupees(o.mrpPaise), stock: String(o.stock), cost: toRupees(o.costPaise), image: o.imageUrl ?? "", sku: o.sku ?? "", weight: o.weightGrams ? String(o.weightGrams) : "" })));
   const [listed, setListed] = useState<[string, string]>(["", ""]);
   const [manufacturerInfo, setManufacturerInfo] = useState(initial?.manufacturerInfo ?? "");
   const [error, setError] = useState("");
@@ -96,13 +109,13 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const kinds = optionNames[0].trim() ? (optionNames[1].trim() ? [optionNames[0].trim(), optionNames[1].trim()] : [optionNames[0].trim()]) : [];
   const setOption = (i: number, patch: Partial<OptRow>) => setOptions(options.map((o, j) => (j === i ? { ...o, ...patch } : o)));
   const setValue = (i: number, k: number, v: string) => setOption(i, { values: k === 0 ? [v, options[i].values[1]] : [options[i].values[0], v] });
-  const blank = { price: "", mrp: "", stock: "", cost: "", image: "" };
+  const blank = { price: "", mrp: "", stock: "", cost: "", image: "", sku: "", weight: "" };
   // The first option starts from the price and stock already typed above.
-  const addOption = () => setOptions([...options, { values: ["", ""], ...(options.length === 0 ? { price, mrp, stock, cost, image: "" } : blank) }]);
+  const addOption = () => setOptions([...options, { values: ["", ""], ...(options.length === 0 ? { price, mrp, stock, cost, image: "", sku: "", weight } : blank) }]);
   // Removing the last option leaves its values in the single price fields instead of stale ones.
   const removeOption = (i: number) => {
     const left = options.filter((_, j) => j !== i);
-    if (left.length === 0) { const o = options[i]; setPrice(o.price); setMrp(o.mrp); setStock(o.stock); setCost(o.cost); setOptionNames(["", ""]); }
+    if (left.length === 0) { const o = options[i]; setPrice(o.price); setMrp(o.mrp); setStock(o.stock); setCost(o.cost); setWeight(o.weight); setOptionNames(["", ""]); }
     setOptions(left);
   };
   // Names a kind from the suggestions: the first empty slot, never twice.
@@ -131,6 +144,7 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
     const optionRows = sized ? options.map((o) => ({
       id: o.id, values: kinds.map((_, k) => o.values[k].trim()), pricePaise: Math.round(Number(o.price) * 100), mrpPaise: o.mrp ? Math.round(Number(o.mrp) * 100) : undefined,
       stock: Math.round(Number(o.stock || 0)), costPaise: o.cost ? Math.round(Number(o.cost) * 100) : undefined, imageUrl: o.image || undefined,
+      sku: o.sku.trim() || undefined, weightGrams: o.weight ? Math.round(Number(o.weight)) : undefined,
     })) : [];
     for (const [n, o] of optionRows.entries()) {
       const name = o.values.join(" / ");
@@ -142,6 +156,8 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
     if (new Set(optionRows.map((o) => o.values.join(" / ").toLowerCase())).size !== optionRows.length) return setError("Two options are the same");
     const pricePaise = sized ? Math.min(...optionRows.map((o) => o.pricePaise)) : Math.round(Number(price) * 100);
     if (!Number.isFinite(pricePaise) || pricePaise < 0) return setError("Enter a valid price");
+    if (own && hsn.trim() && !/^\d{4}(\d{2}(\d{2})?)?$/.test(hsn.replace(/\s/g, ""))) return setError("The HSN code must be 4, 6 or 8 digits");
+    if (own && payMode === "advance" && (!Number.isInteger(Number(advancePercent)) || Number(advancePercent) < 10 || Number(advancePercent) > 90)) return setError("The share paid in advance must be a whole number from 10 to 90");
     if (!effectiveCategory) return setError("Create a category first");
     if (own && chargeMode === "charge" && chargeFee && (!Number.isFinite(Number(chargeFee)) || Number(chargeFee) < 0)) return setError("Enter a valid delivery charge");
     const sale = own && saleOn && !sized ? { salePricePaise: Math.round(Number(salePrice) * 100), saleEndsAt: toIso(saleEndsAt) } : null;
@@ -159,7 +175,7 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
       specifications: Object.fromEntries(specs.filter((s) => s.k.trim() && s.v.trim()).map((s) => [s.k.trim(), s.v.trim()])),
       images: images.map((u) => u.trim()).filter(Boolean).map((url) => ({ url })),
       videoUrls: videos,
-      showRating, dealLabel: dealLabel.trim() || undefined, gstRatePercent: Number(gstRate),
+      showRating, dealLabel: dealLabel.trim() || undefined, gstRatePercent: Number(gstRate), hsnCode: own && hsn.trim() ? hsn.replace(/\s/g, "") : undefined,
       packSize: packSize.trim() || undefined, saleTag: saleTag || undefined,
       variantGroup: variantGroup.trim() || undefined, colorName: colorName.trim() || undefined,
       warranty: warranty.trim() || undefined, manufacturerInfo: manufacturerInfo.trim() || undefined,
@@ -168,7 +184,9 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
       ...(own
         ? {
             sku: sku.trim(), stock: sized ? totalStock : Number(stock || 0), costPaise: !sized && cost ? Math.round(Number(cost) * 100) : undefined,
+            weightGrams: !sized && weight ? Math.round(Number(weight)) : undefined,
             options: optionRows, optionNames: sized ? kinds : [],
+            onlineOnly: payMode === "online", advancePercent: payMode === "advance" ? Math.round(Number(advancePercent)) : undefined,
             returnDays: returnMode === "none" ? 0 : returnMode === "days" ? Math.max(1, Math.min(90, Math.round(Number(returnDays) || 7))) : undefined,
             showAddToCart, showSold, freeDelivery: chargeMode === "free", chargeDelivery: chargeMode === "charge", deliveryFeePaise: chargeMode === "charge" && chargeFee ? Math.round(Number(chargeFee) * 100) : undefined,
             deliveryDays: showDelivery ? Math.max(0, Math.min(30, Math.round(Number(deliveryDays) || 0))) : undefined,
@@ -266,6 +284,12 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                 </Select>
                 <span className={hint}>Already included in the price. Used on invoices once GST is switched on in Settings.</span>
               </label>
+              {own && (
+                <label className={label}>HSN / SAC code <span className="font-normal text-muted">optional</span>
+                  <input value={hsn} inputMode="numeric" maxLength={12} placeholder="8504" onChange={(e) => setHsn(e.target.value)} className={`${inputCls} mt-1.5 font-mono`} />
+                  <span className={hint}>4, 6 or 8 digits. Printed beside this product on GST invoices; businesses above the turnover limit must show it.</span>
+                </label>
+              )}
             </div>
           </Card>
 
@@ -306,7 +330,9 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                         <label className="min-w-24 flex-1 text-xs font-medium text-muted">Price (₹)<input type="number" min="0" step="0.01" value={o.price} aria-label={`Option ${i + 1} price`} onChange={(e) => setOption(i, { price: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
                         <label className="min-w-24 flex-1 text-xs font-medium text-muted">MRP (₹)<input type="number" min="0" step="0.01" value={o.mrp} aria-label={`Option ${i + 1} MRP`} onChange={(e) => setOption(i, { mrp: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
                         <label className="min-w-20 flex-[0.8] text-xs font-medium text-muted">Stock<input type="number" min="0" step="1" value={o.stock} aria-label={`Option ${i + 1} stock`} onChange={(e) => setOption(i, { stock: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
-                        <label className="min-w-24 flex-1 text-xs font-medium text-muted">Cost (₹)<input type="number" min="0" step="0.01" value={o.cost} aria-label={`Option ${i + 1} cost`} onChange={(e) => setOption(i, { cost: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
+                        {showSkuWeight && <label className="min-w-28 flex-1 text-xs font-medium text-muted">SKU<input value={o.sku} maxLength={64} aria-label={`Option ${i + 1} SKU`} onChange={(e) => setOption(i, { sku: e.target.value })} className={`${inputCls} mt-1 font-mono text-ink`} /></label>}
+                        {showSkuWeight && <label className="min-w-24 flex-1 text-xs font-medium text-muted">Weight (g)<input type="number" step="1" value={o.weight} aria-label={`Option ${i + 1} weight`} onChange={(e) => setOption(i, { weight: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>}
+                        {seeCosts && <label className="min-w-24 flex-1 text-xs font-medium text-muted">Cost (₹)<input type="number" min="0" step="0.01" value={o.cost} aria-label={`Option ${i + 1} cost`} onChange={(e) => setOption(i, { cost: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>}
                         {images.length > 0 && (
                           <label className="min-w-28 flex-1 text-xs font-medium text-muted">Picture
                             <Select aria-label={`Option ${i + 1} picture`} value={o.image} onChange={(e) => setOption(i, { image: e.target.value })} className={`${inputCls} mt-1 text-ink`}>
@@ -353,7 +379,13 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className={label}>SKU<input required value={sku} onChange={(e) => setSku(e.target.value)} className={`${inputCls} mt-1.5 font-mono`} /></label>
                 <label className={label}>Stock quantity<input required type="number" min="0" disabled={sized} value={sized ? String(totalStock) : stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} mt-1.5 disabled:bg-canvas disabled:text-muted`} />{sized && <span className={hint}>Total of all options.</span>}</label>
-                {!sized && (
+                {!sized && showSkuWeight && (
+                  <label className={label}>Weight per unit (g) <span className="font-normal text-muted">optional</span>
+                    <input type="number" step="1" value={weight} onChange={(e) => setWeight(e.target.value)} className={`${inputCls} mt-1.5`} />
+                    <span className={hint}>Shown on packing slips and labels; 1 kg is 1000.</span>
+                  </label>
+                )}
+                {!sized && seeCosts && (
                 <label className={`${label} sm:col-span-2`}>Cost price per unit (₹) <span className="font-normal text-muted">optional</span>
                   <input type="number" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} className={`${inputCls} mt-1.5`} />
                   <span className={hint}>Private. Used to calculate profit in Analytics; orders keep the cost at the time of sale.</span>
@@ -412,6 +444,35 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
                   <textarea value={disclosure} onChange={(e) => setDisclosure(e.target.value)} rows={2} placeholder="Leave blank to use the default disclosure." className={`${inputCls} mt-1.5`} />
                 </label>
               </div>
+            </Card>
+          )}
+
+          {own && (
+            <Card title="How customers can pay" description="Optional. Choose whether this product can be bought with pay on delivery, must be paid online, or is sold with part payment.">
+              <fieldset className="space-y-3 text-sm">
+                <legend className="sr-only">How customers can pay</legend>
+                <label className="flex items-start gap-3">
+                  <input type="radio" name="payMode" checked={payMode === "any"} onChange={() => setPayMode("any")} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                  <span><span className="font-medium">Any way the store offers</span><br /><span className="text-xs text-muted">Online or pay on delivery, as set in Settings.</span></span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <input type="radio" name="payMode" checked={payMode === "online"} onChange={() => setPayMode("online")} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                  <span><span className="font-medium">Online payment only</span><br /><span className="text-xs text-muted">No pay on delivery for this product. A basket that holds it must be paid for online, and the product page says so.</span></span>
+                </label>
+                {(advanceOffered || payMode === "advance") && (
+                  <label className="flex items-start gap-3">
+                    <input type="radio" name="payMode" checked={payMode === "advance"} onChange={() => setPayMode("advance")} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                    <span><span className="font-medium">Part payment: some now, the rest on delivery</span><br /><span className="text-xs text-muted">The customer pays this share online when ordering and the balance to the courier on delivery. If a basket holds products with different shares, the highest share is taken.</span></span>
+                  </label>
+                )}
+                {payMode === "advance" && (
+                  <label className={`${label} ml-7`}>Paid online first (%)
+                    <input type="number" step={1} value={advancePercent} onChange={(e) => setAdvancePercent(e.target.value)} className={`${inputCls} mt-1.5 !w-28`} />
+                    <span className={hint}>{advanceOffered ? "For example 30 or 40." : "Part payment is switched off in Settings, so customers do not see this until you switch it on."}</span>
+                  </label>
+                )}
+                {!advanceOffered && payMode !== "advance" && <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">Part payment (some now, the rest on delivery) can be switched on in Settings; it then appears here.</p>}
+              </fieldset>
             </Card>
           )}
 

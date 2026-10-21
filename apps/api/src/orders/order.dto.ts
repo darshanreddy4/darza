@@ -29,7 +29,8 @@ export class CreateOrderDto {
   @ValidateNested() @Type(() => ShippingDto)
   shipping!: ShippingDto;
 
-  @IsOptional() @IsIn(["COD", "ONLINE"]) paymentMethod?: "COD" | "ONLINE";
+  // DELIVERY_ADVANCE is for guests: the delivery charge now, the rest in cash on delivery.
+  @IsOptional() @IsIn(["COD", "ONLINE", "ADVANCE", "DELIVERY_ADVANCE"]) paymentMethod?: "COD" | "ONLINE" | "ADVANCE" | "DELIVERY_ADVANCE";
 
   @IsOptional() @IsString() @MaxLength(30) couponCode?: string;
 
@@ -45,10 +46,39 @@ export class QuoteDto {
 
   // The delivery PIN code, when known, so area delivery fees are included.
   @IsOptional() @Matches(/^[1-9]\d{5}$/) pincode?: string;
+
+  // The way the shopper means to pay, so the pay-on-delivery fee is included when it is COD.
+  @IsOptional() @IsIn(["COD", "ONLINE", "ADVANCE", "DELIVERY_ADVANCE"]) paymentMethod?: "COD" | "ONLINE" | "ADVANCE" | "DELIVERY_ADVANCE";
 }
 
 export class UpdateOrderStatusDto {
   @IsEnum(OrderStatus) status!: OrderStatus;
+  // Courier details, when marking the order shipped.
+  @IsOptional() @IsString() @MaxLength(80) courierName?: string;
+  @IsOptional() @IsString() @MaxLength(80) trackingNumber?: string;
+  @IsOptional() @IsString() @MaxLength(500) trackingUrl?: string;
+}
+
+// Adds or corrects the courier details of an order that has shipped.
+export class TrackingDto {
+  @IsOptional() @IsString() @MaxLength(80) courierName?: string;
+  @IsOptional() @IsString() @MaxLength(80) trackingNumber?: string;
+  @IsOptional() @IsString() @MaxLength(500) trackingUrl?: string;
+}
+
+// One parcel's tracking number in a bulk shipment.
+export class BulkTrackingDto {
+  @IsString() @MaxLength(40) id!: string;
+  @IsString() @MaxLength(80) trackingNumber!: string;
+}
+
+// Orders to mark shipped together with one courier.
+export class BulkShipDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50) @IsString({ each: true }) @MaxLength(40, { each: true }) ids!: string[];
+  @IsOptional() @IsString() @MaxLength(80) courierName?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => BulkTrackingDto) trackingNumbers?: BulkTrackingDto[];
+  // The courier's tracking page with {number} where the tracking number goes.
+  @IsOptional() @IsString() @MaxLength(500) trackingUrlTemplate?: string;
 }
 
 export class VerifyPaymentDto {

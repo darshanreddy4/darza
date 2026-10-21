@@ -31,13 +31,13 @@ flowchart LR
 | Person | Uses | To |
 |---|---|---|
 | Shopper (guest or customer) | The storefront | Find, compare, buy, track, return, review |
-| Staff | The staff console (`/admin`, smaller) | Process orders, handle returns, answer questions, see stock |
+| Team member | Only the parts of `/admin` their role allows | Whatever the admin gave them: process orders, handle returns, answer questions, moderate reviews, edit products, see finance figures |
 | Admin / owner | The admin console (`/admin`, full) | Run the catalogue, prices, promotions, money, team, settings and reports |
 
 ## What makes it different
 
 - **One login for everything:** email and password, mobile number with a one-time code, or Google. Accounts can add the missing methods later.
-- **Money-safe by design:** stock is held, released and restored automatically; paid online orders refund automatically; staff cannot move money.
+- **Money-safe by design:** stock is held, released and restored automatically; paid online orders refund automatically; money actions need their own permission.
 - **Complete self-service for customers:** cancel before shipping, partial returns, invoices, saved addresses, data download, account deletion.
 - **Everything configurable without a developer:** brand, logo, contact details, delivery fee, tax, return days, home page layout, banners, coupons.
 - **Built-in safety net:** an audit log of every admin change, login lockout, rate limits, secure sessions, health checks, backups.
@@ -49,7 +49,7 @@ flowchart LR
 |---|---|
 | Customer-facing pages | 23 (home, products, product, compare, wishlist, cart, checkout, orders, account, login, sign up, forgot and reset password, verify email, about, contact, terms, privacy, refund policy, shipping policy, affiliate disclosure, unsubscribe, invoice) |
 | Admin and staff screens | 22 (overview, home layout, analytics, orders, returns, abandoned carts, products list/new/edit, questions, categories, users and user detail, coupons, banners list/new/edit, affiliate clicks, brand, audit log, settings, attention list) |
-| Roles | 4 (guest, customer, staff, admin) |
+| Roles | guest, customer, admin, and as many team roles as the admin makes (22 permissions, 9 ready-made templates) |
 | Order statuses | 7 |
 | Home page building blocks | 14 types (banners, trust bar, categories, category slider, products, product slider, promo banner, image tiles, tile carousel, text, FAQ, how it works, spacer, ad slot) |
 | Ways to sign in | 3 (email + password, mobile number + code, Google) |
@@ -57,7 +57,7 @@ flowchart LR
 | Notification channels | 3 (email, SMS, WhatsApp) |
 | Backend operations (API endpoints) | 119 |
 | Data tables | 24 |
-| Automated checks | 208 unit tests and 282 browser tests that run on every change |
+| Automated checks | 363 unit tests and 536 browser tests that run on every change |
 
 ## Two ways money can move, and who controls them
 

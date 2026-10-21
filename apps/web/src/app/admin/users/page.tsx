@@ -4,19 +4,22 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { API_URL, formatPrice } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls, td, th } from "@/components/admin/ui";
 import { Select } from "@/components/Select";
 
 type Role = "CUSTOMER" | "STAFF" | "ADMIN";
-interface UserRow { id: string; email: string | null; signIn: string[]; name: string; role: Role; emailVerified: boolean; createdAt: string; phone: string; address: string; orders: number; spentPaise: number }
-interface UserList { total: number; page: number; pageSize: number; admins: number; items: UserRow[] }
+interface UserRow { id: string; email: string | null; signIn: string[]; name: string; role: Role; staffRole: { id: string; name: string } | null; emailVerified: boolean; createdAt: string; phone: string; address: string; orders: number; spentPaise: number }
+interface UserList { total: number; page: number; pageSize: number; admins: number; roles: { id: string; name: string }[]; items: UserRow[] }
 
 const who = (u: { email: string | null; phone: string; name: string }) => u.email ?? (u.phone || u.name);
 
 export default function UsersPage() {
   const call = useAdminApi();
   const { user: me } = useAuth();
+  // Admins manage accounts and team roles; everyone else with access here only looks at customers.
+  const admin = me?.role === "ADMIN";
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
@@ -63,29 +66,34 @@ export default function UsersPage() {
     try { await fn(); setNotice(message); users.reload(); } catch (e) { setError((e as Error).message); }
   }
 
-  function changeRole(u: UserRow, next: Role) {
-    if (next === u.role) return;
-    const text = next === "ADMIN"
-      ? `Make ${who(u)} an admin? They will get full access to orders, customers, products and settings.`
-      : next === "STAFF"
-        ? `Make ${who(u)} staff? They can handle orders (not cancel or refund them), approve returns and answer customer questions, and see products without costs.`
+  // The role select holds CUSTOMER, ADMIN or STAFF:<team role id> (empty id: staff from before roles existed).
+  const roleValue = (u: UserRow) => (u.role === "STAFF" ? `STAFF:${u.staffRole?.id ?? ""}` : u.role);
+
+  function changeRole(u: UserRow, next: string) {
+    if (next === roleValue(u)) return;
+    const [role, staffRoleId] = next.split(":") as [Role, string | undefined];
+    const teamRole = data?.roles.find((r) => r.id === staffRoleId);
+    const text = role === "ADMIN"
+      ? `Make ${who(u)} an admin? They will get full access, including the team, roles and store settings.`
+      : role === "STAFF"
+        ? `Give ${who(u)} the role ${teamRole ? `“${teamRole.name}”` : "staff (the original staff access)"}? They will only see and do what that role allows. You can change a role on the Team & roles page.`
         : `Remove team access from ${who(u)}?`;
     if (!confirm(text)) return;
-    void act(() => call(`/admin/users/${u.id}/role`, { method: "PATCH", body: JSON.stringify({ role: next }) }), `${who(u)} is now ${next === "ADMIN" ? "an admin" : next === "STAFF" ? "staff" : "a customer"}`);
+    void act(() => call(`/admin/users/${u.id}/role`, { method: "PATCH", body: JSON.stringify({ role, staffRoleId: role === "STAFF" ? staffRoleId || null : null }) }), `${who(u)} is now ${role === "ADMIN" ? "an admin" : role === "STAFF" ? (teamRole ? `in the role ${teamRole.name}` : "staff") : "a customer"}`);
   }
 
   return (
     <>
-      <PageHeader title="Users" description="Everyone with an account, and who can use this admin area." actions={<button className={btn.secondary} disabled={exporting || !data?.total} onClick={exportCsv}>{exporting ? "Preparing…" : "Export CSV"}</button>} />
+      <PageHeader title={admin ? "Users" : "Customers"} description={admin ? "Everyone with an account, and who can use this admin area. Give team members a role to control what they can do." : "Everyone who has an account with the store."} actions={can(me, "customers.export") ? <button className={btn.secondary} disabled={exporting || !data?.total} onClick={exportCsv}>{exporting ? "Preparing…" : "Export CSV"}</button> : undefined} />
       {error && <Alert tone="error" onClose={() => setError("")}>{error}</Alert>}
       {notice && <Alert tone="success" onClose={() => setNotice("")}>{notice}</Alert>}
       {users.error && !data && <Alert tone="error">{users.error}</Alert>}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+      <div className={`mb-4 grid gap-3 ${admin ? "sm:grid-cols-[1fr_auto_auto]" : "sm:grid-cols-[1fr_auto]"}`}>
         <input className={inputCls} placeholder="Search name, email or phone" aria-label="Search users" value={q} onChange={(e) => setQ(e.target.value)} />
-        <Select className={inputCls} aria-label="Filter by role" value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
-          <option value="">All roles</option><option value="ADMIN">Admins</option><option value="STAFF">Staff</option><option value="CUSTOMER">Customers</option>
-        </Select>
+        {admin && <Select className={inputCls} aria-label="Filter by role" value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
+          <option value="">All roles</option><option value="ADMIN">Admins</option><option value="STAFF">Team members</option><option value="CUSTOMER">Customers</option>
+        </Select>}
         <Select className={inputCls} aria-label="Filter by email status" value={verified} onChange={(e) => { setVerified(e.target.value); setPage(1); }}>
           <option value="">Any email status</option><option value="true">Verified</option><option value="false">Not verified</option>
         </Select>
@@ -95,7 +103,7 @@ export default function UsersPage() {
         {users.loading && !data ? <Skeleton /> : !data || data.items.length === 0 ? <Empty title="No users found">Try a different search or filter.</Empty> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-line bg-canvas/60"><th className={th}>User</th><th className={th}>Email</th><th className={th}>Phone</th><th className={th}>Address</th><th className={th}>Orders</th><th className={th}>Joined</th><th className={th}>Role</th><th className={`${th} text-right`}>Actions</th></tr></thead>
+              <thead><tr className="border-b border-line bg-canvas/60"><th className={th}>User</th><th className={th}>Email</th><th className={th}>Phone</th><th className={th}>Address</th><th className={th}>Orders</th><th className={th}>Joined</th>{admin && <th className={th}>Role</th>}{admin && <th className={`${th} text-right`}>Actions</th>}</tr></thead>
               <tbody className="divide-y divide-line">
                 {data.items.map((u) => {
                   const self = u.id === me?.id;
@@ -110,26 +118,29 @@ export default function UsersPage() {
                       <td className={`${td} max-w-64 text-xs text-ink-3`} title={u.address}>{u.address ? <span className="line-clamp-2">{u.address}</span> : <span className="text-muted">Not provided</span>}</td>
                       <td className={td}>{u.orders}{u.spentPaise > 0 && <p className="text-xs text-muted">{formatPrice(u.spentPaise)} spent</p>}</td>
                       <td className={`${td} text-muted`}>{new Date(u.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</td>
-                      <td className={td}>
+                      {admin && <td className={td}>
                         <Select
                           className={`${inputCls} !w-auto !py-1.5`}
                           aria-label={`Role for ${who(u)}`}
-                          value={u.role}
+                          value={roleValue(u)}
                           disabled={self}
                           title={self ? "You cannot change your own role" : undefined}
-                          onChange={(e) => changeRole(u, e.target.value as Role)}
+                          onChange={(e) => changeRole(u, e.target.value)}
                         >
-                          <option value="CUSTOMER">Customer</option><option value="STAFF">Staff</option><option value="ADMIN">Admin</option>
+                          <option value="CUSTOMER">Customer</option>
+                          {u.role === "STAFF" && !u.staffRole && <option value="STAFF:">Staff (original access)</option>}
+                          {(data?.roles ?? []).map((r) => <option key={r.id} value={`STAFF:${r.id}`}>{r.name}</option>)}
+                          <option value="ADMIN">Admin</option>
                         </Select>
-                      </td>
-                      <td className={`${td} text-right`}>
+                      </td>}
+                      {admin && <td className={`${td} text-right`}>
                         {!self && (
                           <button
                             className={btn.secondary + " !px-3 !py-1.5"}
                             onClick={() => confirm(`Sign ${who(u)} out of every device? They can log in again with their password.`) && act(() => call(`/admin/users/${u.id}/sign-out`, { method: "POST" }), `${who(u)} was signed out everywhere`)}
                           >Sign out everywhere</button>
                         )}
-                      </td>
+                      </td>}
                     </tr>
                   );
                 })}
@@ -141,7 +152,7 @@ export default function UsersPage() {
 
       {data && data.total > 0 && (
         <div className="mt-4 flex items-center justify-between text-sm text-muted">
-          <p>{data.total} {data.total === 1 ? "user" : "users"} · {data.admins} {data.admins === 1 ? "admin" : "admins"}</p>
+          <p>{data.total} {data.total === 1 ? "user" : "users"}{admin && <> · {data.admins} {data.admins === 1 ? "admin" : "admins"}</>}</p>
           <div className="flex items-center gap-2">
             <button className={btn.secondary} disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
             <span>Page {page} of {pages}</span>

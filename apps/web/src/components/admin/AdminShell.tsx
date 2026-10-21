@@ -6,9 +6,9 @@ import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
 import { useAuth, accountLabel } from "@/lib/auth";
 import { useBrandProfile } from "@/components/BrandProvider";
-import { isTeam, staffMayVisit } from "@/lib/permissions";
+import { isTeam, mayVisit } from "@/lib/permissions";
 
-const NAV = [
+export const NAV = [
   { href: "/admin", label: "Overview", icon: "M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" },
   { href: "/admin/home", label: "Home page", icon: "M3 3h8v8H3zM13 3h8v5h-8zM13 11h8v10h-8zM3 14h8v7H3z" },
   { href: "/admin/analytics", label: "Analytics", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
@@ -16,9 +16,12 @@ const NAV = [
   { href: "/admin/returns", label: "Returns", icon: "M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" },
   { href: "/admin/abandoned-carts", label: "Abandoned carts", icon: "M6 2l-3 4v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M9 12l6 4M15 12l-6 4" },
   { href: "/admin/products", label: "Products", icon: "M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8" },
+  { href: "/admin/stock", label: "Stock", icon: "M3 21V9l9-6 9 6v12M9 21v-8h6v8" },
   { href: "/admin/questions", label: "Questions", icon: "M9 9a3 3 0 1 1 4.2 2.8c-.8.4-1.2 1-1.2 1.700M12 17h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" },
+  { href: "/admin/reviews", label: "Reviews", icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM8 9h8M8 13h5" },
   { href: "/admin/categories", label: "Categories", icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
   { href: "/admin/users", label: "Users", icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" },
+  { href: "/admin/team", label: "Team & roles", icon: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4" },
   { href: "/admin/coupons", label: "Coupons", icon: "M20 12a2 2 0 0 0 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 0 0-4V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 0-2 2zM9 9l6 6M9.5 9.5h.01M14.5 14.5h.01" },
   { href: "/admin/banners", label: "Banners", icon: "M3 5h18v10H3zM8 19h8M12 15v4" },
   { href: "/admin/clicks", label: "Affiliate clicks", icon: "M9 3l-6 6 6 6M15 21l6-6-6-6M14 4l-4 16" },
@@ -35,12 +38,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const staff = user?.role === "STAFF";
+  // A team member is sent back to the start page from anything their role does not cover (the API refuses it too).
+  const allowed = mayVisit(user, pathname);
   useEffect(() => {
     if (ready && !user) router.replace("/login");
-    // Staff land on orders and are sent back there from anything that is for admins only.
-    if (staff && !staffMayVisit(pathname)) router.replace("/admin/orders");
-  }, [ready, user, staff, pathname, router]);
+    if (ready && user && isTeam(user) && !allowed) router.replace("/admin");
+  }, [ready, user, allowed, router]);
 
   if (!ready || !user) return <div className="grid min-h-screen place-items-center text-sm text-muted">Loading…</div>;
   if (!isTeam(user)) {
@@ -55,16 +58,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (staff && !staffMayVisit(pathname)) return <div className="grid min-h-screen place-items-center text-sm text-muted">Loading…</div>;
-  const nav = NAV.filter((n) => !staff || staffMayVisit(n.href));
+  if (!allowed) return <div className="grid min-h-screen place-items-center text-sm text-muted">Loading…</div>;
+  const staff = user.role === "STAFF";
+  const nav = NAV.filter((n) => mayVisit(user, n.href));
   const isActive = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname.startsWith(href));
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[256px_1fr]">
-      <aside className="bg-ink text-white/70 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
+    <div className="min-h-screen lg:grid lg:grid-cols-[256px_1fr] print:block">
+      <aside className="bg-ink text-white/70 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col print:hidden">
         <div className="flex items-center justify-between px-5 py-5 lg:block">
           <Link href="/admin"><Logo name={brand.name} logoUrl={brand.logoUrl || undefined} onBadge={brand.logoOnBadge} design={brand.logoDesign} /></Link>
-          <p className="hidden pt-2 text-[11px] font-semibold uppercase tracking-widest text-white/60 lg:block">{staff ? "Staff console" : "Admin console"}</p>
+          <p className="hidden pt-2 text-[11px] font-semibold uppercase tracking-widest text-white/60 lg:block">{staff ? user.staffRoleName ?? "Staff console" : "Admin console"}</p>
         </div>
         <nav className="no-scrollbar flex gap-1 overflow-x-auto px-3 pb-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden lg:pb-0" aria-label="Admin">
           {nav.map((n) => (
@@ -92,14 +96,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="min-w-0">
-        <div className="flex items-center justify-between border-b border-line bg-white px-6 py-3 text-sm">
-          <span className="text-muted">{brand.name} {staff ? "staff" : "administration"}</span>
+        <div className="flex items-center justify-between border-b border-line bg-white px-6 py-3 text-sm print:hidden">
+          <span className="text-muted">{brand.name} {staff ? (user.staffRoleName ?? "staff").toLowerCase() : "administration"}</span>
           <div className="flex items-center gap-4">
             <Link href="/" target="_blank" className="font-medium text-brand-700 hover:underline">View store ↗</Link>
             <button onClick={() => { logout(); router.replace("/login"); }} className="px-2 py-1.5 font-medium text-muted hover:text-ink lg:hidden">Log out</button>
           </div>
         </div>
-        <main className="mx-auto max-w-6xl p-6">{children}</main>
+        <main className="mx-auto max-w-6xl p-6 print:max-w-none print:p-0">{children}</main>
       </div>
     </div>
   );

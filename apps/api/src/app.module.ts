@@ -25,6 +25,7 @@ import { UsersModule } from "./users/users.module";
 import { HomeModule } from "./home/home.module";
 import { SiteModule } from "./site/site.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { InventoryModule } from "./inventory/inventory.module";
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
     HomeModule,
     SiteModule,
     NotificationsModule,
+    InventoryModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

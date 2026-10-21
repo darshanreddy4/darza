@@ -147,11 +147,13 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
               </div>
               )}
               {!own && <p className="mt-1 text-xs text-muted">Price may change on {product.platform}. Check the final price there.</p>}
-              {(product.saleTag || (own && product.lowStock) || product.multiBuy) && (
+              {(product.saleTag || (own && product.lowStock) || product.multiBuy || (own && (product.onlineOnly || !!product.advancePercent))) && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {product.saleTag && <SaleTagBadge tag={product.saleTag} />}
                   {own && product.lowStock && <span className="text-sm font-semibold text-red-700">Only few left</span>}
                   {product.multiBuy && <span className="text-sm font-semibold text-green-800">{multiBuyText(product.multiBuy)}</span>}
+                  {own && product.onlineOnly && <span className="rounded-md bg-canvas px-2 py-0.5 text-sm font-semibold text-ink-3 ring-1 ring-line">Online payment only</span>}
+                  {own && !product.onlineOnly && !!product.advancePercent && <span className="rounded-md bg-brand-50 px-2 py-0.5 text-sm font-semibold text-brand-800">Pay {product.advancePercent}% now, rest on delivery</span>}
                 </div>
               )}
             </div>
@@ -169,6 +171,8 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
             <dl className="divide-y divide-line rounded-2xl bg-canvas text-sm">
               <Row label="Sold by" value={product.sellerName} />
               {own && product.deliveryInfo && <Row label="Delivery" value={product.deliveryInfo} />}
+              {own && product.onlineOnly && <Row label="Payment" value="Online payment only. Pay on delivery is not available for this product." />}
+              {own && !product.onlineOnly && !!product.advancePercent && <Row label="Payment" value={`Pay ${product.advancePercent}% online now and the rest on delivery.`} />}
               {own && <Row label="Returns" value={product.returnPolicy || (product.returnDays > 0 ? `${product.returnDays}-day returns after delivery` : "No returns on this item")} />}
               {!own && <Row label="Delivery & returns" value={`Handled by ${product.platform}`} />}
               {own && product.warranty && <Row label="Warranty" value={product.warranty} />}

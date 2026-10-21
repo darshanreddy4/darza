@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { SiteService } from "../site/site.module";
 import { MailService } from "../mail/mail.service";
@@ -16,11 +16,18 @@ import { productReturnDays } from "../products/return-policy";
 import { sellingPrice } from "../products/sale";
 import { chooseOption, lineKey } from "../products/product-options";
 import { itemName, restock } from "../products/stock";
+import { recordItemChange } from "../inventory/ledger";
 import { PincodeService } from "../store/pincode.service";
 import { deliveryModeOf, parseGifts, parseZones, priceBasket, rewardDiscountFor, zoneFor } from "../store/delivery";
+import { codFor, codRulesOf } from "../store/cod";
+import { advanceFor, advanceNames, onlineOnlyNames, type PayLine } from "../store/advance";
+import { GUEST_COD_REASON, guestDeliveryAdvance, guestRulesOf, guestShare } from "../store/guest";
+import { onlineChargePaise } from "./payment";
 import { SettingsService } from "../store/settings.service";
 import { CreateOrderDto, QuoteDto, VerifyPaymentDto } from "./order.dto";
 import { canCustomerCancel, cancelReasonText } from "./cancel";
+import { hasTracking, readTracking, trackingText, type TrackingInput } from "./tracking";
+import { bulkTrackingError, collectPaise, planBulkShip, trackingLink, type BulkTracking } from "./shipping";
 import { canRequestReturn, eligibleQty, lineWindow, orderReturnDeadline } from "./returns";
 
 // Statuses where stock has been returned to inventory.
@@ -75,7 +82,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   async quote(dto: QuoteDto, userId?: string) {
     const settings = await this.settings.get();
     const wanted = this.mergeLines(dto.items);
-    const products = await this.prisma.product.findMany({ where: { id: { in: [...new Set(wanted.map((w) => w.productId))] }, status: "PUBLISHED", productType: "OWN" }, select: { id: true, pricePaise: true, productType: true, multiBuyQty: true, multiBuyPercent: true, salePricePaise: true, saleEndsAt: true, returnDays: true, returnPolicy: true, freeDelivery: true, chargeDelivery: true, deliveryFeePaise: true, options: { select: { id: true, pricePaise: true } } } });
+    const products = await this.prisma.product.findMany({ where: { id: { in: [...new Set(wanted.map((w) => w.productId))] }, status: "PUBLISHED", productType: "OWN" }, select: { id: true, name: true, onlineOnly: true, advancePercent: true, pricePaise: true, productType: true, multiBuyQty: true, multiBuyPercent: true, salePricePaise: true, saleEndsAt: true, returnDays: true, returnPolicy: true, freeDelivery: true, chargeDelivery: true, deliveryFeePaise: true, options: { select: { id: true, pricePaise: true } } } });
     const byId = new Map(products.map((p) => [p.id, p]));
     const unavailable: string[] = [];
     // "Buy N, save extra P%" is already in the unit prices, so the subtotal is what will be charged for the goods.
@@ -107,14 +114,25 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       discountPaise: discount, rules: settings, zone: zoneFor(parseZones(settings.deliveryZones), dto.pincode), gifts: tiers,
       coupons: offers.filter((o) => o.minOrderPaise > 0).map((o) => ({ title: `${offerText(o)} with code ${o.code}`, atPaise: o.minOrderPaise, reached: o.unlocked })),
     });
+    // Whether pay on delivery may be used for this basket and what it costs; the fee is in the total only when COD is the chosen way to pay.
+    const payLines: PayLine[] = priced.map((x) => ({ name: x.p.name, onlineOnly: x.p.onlineOnly, advancePercent: x.p.advancePercent }));
+    const cod = codFor(codRulesOf(settings), basket.totalPaise, onlineOnlyNames(payLines), advanceNames(settings.advanceEnabled, payLines));
+    // A guest (a shopper who gave only a verified mobile number) pays online, or the delivery charge online and the rest on delivery.
+    const isGuest = userId ? !!(await this.prisma.user.findUnique({ where: { id: userId }, select: { guestCheckout: true } }))?.guestCheckout : false;
+    const guestCod = codFor(codRulesOf(settings), basket.totalPaise, onlineOnlyNames(payLines));
+    const deliveryAdvance = isGuest ? guestDeliveryAdvance({ rules: guestRulesOf(settings), cod: guestCod, deliveryPaise: basket.shippingPaise, orderPaise: basket.totalPaise, productPercent: guestShare(settings.advanceEnabled, payLines) }) : null;
+    const codFeePaise = dto.paymentMethod === "COD" && cod.allowed && !isGuest ? cod.feePaise : dto.paymentMethod === "DELIVERY_ADVANCE" && deliveryAdvance?.allowed ? guestCod.feePaise : 0;
+    // Part payment: a share now, the rest on delivery, when the store offers it and every product in the basket allows it.
+    const advance = advanceFor(settings.advanceEnabled, payLines, basket.totalPaise);
     return {
-      ...basket, coupon, couponError, offers, unavailable,
+      ...basket, totalPaise: basket.totalPaise + codFeePaise, codFeePaise, cod: isGuest ? { allowed: false, feePaise: guestCod.feePaise, reason: GUEST_COD_REASON } : cod,
+      advance, guest: { isGuest, deliveryAdvance }, coupon, couponError, offers, unavailable,
       multiBuySavedPaise: lines.reduce((n, l) => n + l.savedPaise, 0), lines,
     };
   }
 
   async create(userId: string, dto: CreateOrderDto) {
-    const online = dto.paymentMethod === "ONLINE";
+    const online = dto.paymentMethod === "ONLINE" || dto.paymentMethod === "ADVANCE" || dto.paymentMethod === "DELIVERY_ADVANCE";
     if (online && !this.razorpay.enabled) throw new ServiceUnavailableException("Online payments are not available right now. Please choose pay on delivery.");
 
     const settings = await this.settings.get();
@@ -171,15 +189,41 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         lines: bought.map((b) => ({ goodsPaise: b.unitPaise * b.quantity, mode: deliveryModeOf(b.p), feePaise: b.p.deliveryFeePaise })),
         discountPaise, rules: settings, zone: zoneFor(parseZones(settings.deliveryZones), dto.shipping.pincode), gifts: tiers,
       });
-      const shippingPaise = basket.shippingPaise;
+      // Pay on delivery can be switched off, capped, or charged extra; the fee travels inside the delivery charge.
+      const payLines: PayLine[] = bought.map((b) => ({ name: b.p.name, onlineOnly: b.p.onlineOnly, advancePercent: b.p.advancePercent }));
+      let codFeePaise = 0;
+      let guestAdvancePaise = 0;
+      const guest = !!(await tx.user.findUnique({ where: { id: userId }, select: { guestCheckout: true } }))?.guestCheckout;
+      if (dto.paymentMethod === "DELIVERY_ADVANCE" && !guest) throw new BadRequestException("This way to pay is only for checking out without an account.");
+      if (guest && !online) throw new BadRequestException(GUEST_COD_REASON);
+      if (dto.paymentMethod === "DELIVERY_ADVANCE") {
+        // The delivery charge and any cash-on-delivery fee are paid online now; the rest is collected on delivery.
+        const guestCod = codFor(codRulesOf(settings), basket.totalPaise, onlineOnlyNames(payLines));
+        const offer = guestDeliveryAdvance({ rules: guestRulesOf(settings), cod: guestCod, deliveryPaise: basket.shippingPaise, orderPaise: basket.totalPaise, productPercent: guestShare(settings.advanceEnabled, payLines) });
+        if (!offer.allowed) throw new BadRequestException(offer.reason);
+        codFeePaise = guestCod.feePaise;
+        guestAdvancePaise = offer.advancePaise;
+      } else if (!online) {
+        const cod = codFor(codRulesOf(settings), basket.totalPaise, onlineOnlyNames(payLines), advanceNames(settings.advanceEnabled, payLines));
+        if (!cod.allowed) throw new BadRequestException(cod.reason);
+        codFeePaise = cod.feePaise;
+      }
+      const shippingPaise = basket.shippingPaise + codFeePaise;
       const totalDiscount = discountPaise + basket.rewardDiscountPaise;
+      // Part payment: only the advance is charged online now; the rest is collected on delivery.
+      let advancePaise = guestAdvancePaise;
+      if (dto.paymentMethod === "ADVANCE") {
+        const offer = advanceFor(settings.advanceEnabled, payLines, subtotal - totalDiscount + shippingPaise);
+        if (!offer.available) throw new BadRequestException(offer.reason);
+        advancePaise = offer.payNowPaise;
+      }
 
-      return tx.order.create({
+      const created = await tx.order.create({
         data: {
           userId,
           status: online ? "PENDING_PAYMENT" : "PLACED",
           paymentMethod: online ? "ONLINE" : "COD",
-          subtotalPaise: subtotal, discountPaise: totalDiscount, rewardDiscountPaise: basket.rewardDiscountPaise, shippingPaise, totalPaise: subtotal - totalDiscount + shippingPaise, gifts: basket.earnedGifts,
+          subtotalPaise: subtotal, discountPaise: totalDiscount, rewardDiscountPaise: basket.rewardDiscountPaise, shippingPaise, codFeePaise, advancePaise, totalPaise: subtotal - totalDiscount + shippingPaise, gifts: basket.earnedGifts,
           couponId, couponCode, gstApplied: settings.gstEnabled,
           buyerEmailKey: who?.emailKey ?? null, buyerPhoneKey: who?.phoneKey ?? null, shipPhoneKey: who?.shipPhoneKey ?? null,
           whatsappOptIn: !!dto.whatsappUpdates && this.whatsapp.available,
@@ -187,13 +231,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           shippingAddr: dto.shipping as unknown as Prisma.InputJsonValue,
           items: {
             create: bought.map((b) => ({
-              productId: b.p.id, quantity: b.quantity, pricePaise: b.unitPaise, costPaise: b.option ? b.option.costPaise : b.p.costPaise, gstRatePercent: b.p.gstRatePercent,
+              productId: b.p.id, quantity: b.quantity, pricePaise: b.unitPaise, costPaise: b.option ? b.option.costPaise : b.p.costPaise, gstRatePercent: b.p.gstRatePercent, hsnCode: b.p.hsnCode,
               returnDays: productReturnDays(b.p, settings.returnWindowDays), optionId: b.option?.id ?? null, optionLabel: b.option?.label ?? null,
+              sku: b.option?.sku ?? b.p.sku, weightGrams: b.option?.weightGrams ?? b.p.weightGrams,
             })),
           },
         },
         include: orderInclude,
       });
+      for (const b of bought) await recordItemChange(tx, b.p.id, b.option?.id ?? null, -b.quantity, { reason: "SALE", orderId: created.id });
+      return created;
     });
 
     // Whatever was in the cart has just been bought.
@@ -204,7 +251,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       return { order, payment: null };
     }
     try {
-      return { order, payment: await this.attachRazorpayOrder(order.id, order.totalPaise) };
+      return { order, payment: await this.attachRazorpayOrder(order.id, onlineChargePaise(order)) };
     } catch (e) {
       await this.cancelPending(order.id);
       throw e;
@@ -217,8 +264,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (!order) throw new NotFoundException();
     if (order.paymentMethod !== "ONLINE" || order.status !== "PENDING_PAYMENT") throw new BadRequestException("This order does not need payment");
     if (!this.razorpay.enabled) throw new ServiceUnavailableException("Online payments are not available right now.");
-    if (order.paymentRef) return this.params(order.id, order.paymentRef, order.totalPaise);
-    return this.attachRazorpayOrder(order.id, order.totalPaise);
+    if (order.paymentRef) return this.params(order.id, order.paymentRef, onlineChargePaise(order));
+    return this.attachRazorpayOrder(order.id, onlineChargePaise(order));
   }
 
   async verify(userId: string, orderId: string, dto: VerifyPaymentDto) {
@@ -246,7 +293,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     const late = await this.prisma.order.findFirst({ where: { paymentRef: razorpayOrderId, status: "CANCELLED" } });
     if (late) {
       await this.prisma.order.update({ where: { id: late.id }, data: { paymentId } });
-      await this.refundLatePayment(late.id, paymentId, late.totalPaise);
+      await this.refundLatePayment(late.id, paymentId, onlineChargePaise(late));
     }
   }
 
@@ -289,15 +336,64 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   listAdmin(status?: OrderStatus) {
     return this.prisma.order.findMany({
       where: status ? { status } : undefined,
-      include: { ...orderInclude, user: { select: { name: true, email: true, phone: true } } },
+      include: { ...orderInclude, user: { select: { name: true, email: true, phone: true, guestCheckout: true } } },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
   }
 
-  async updateStatus(id: string, status: OrderStatus) {
+  // What to print on shipping labels and packing slips; the sender is the business named on invoices.
+  async labels(ids: string[]) {
+    const [orders, settings, brand] = await Promise.all([
+      this.prisma.order.findMany({ where: { id: { in: ids } }, include: { items: { include: { product: { select: { name: true, sku: true } } } } } }),
+      this.settings.get(),
+      this.site.brandName(),
+    ]);
+    const byId = new Map(orders.map((o) => [o.id, o]));
+    return {
+      seller: { name: settings.legalName || brand, address: settings.businessAddress },
+      orders: ids.flatMap((id) => {
+        const o = byId.get(id);
+        if (!o) return [];
+        return [{
+          id: o.id, status: o.status, createdAt: o.createdAt, paymentMethod: o.paymentMethod, totalPaise: o.totalPaise, advancePaise: o.advancePaise, collectPaise: collectPaise(o),
+          shippingName: o.shippingName, shippingAddr: o.shippingAddr, gifts: o.gifts, courierName: o.courierName, trackingNumber: o.trackingNumber,
+          items: o.items.map((i) => ({ name: i.product.name, sku: i.sku ?? i.product.sku, optionLabel: i.optionLabel, quantity: i.quantity, weightGrams: i.weightGrams })),
+          totalWeightGrams: o.items.some((i) => i.weightGrams) ? o.items.reduce((n, i) => n + (i.weightGrams ?? 0) * i.quantity, 0) : null,
+        }];
+      }),
+    };
+  }
+
+  // Marks every order that is ready as shipped with one courier, adding each parcel's tracking number when given; the rest are returned with the reason they were left out.
+  async bulkShip(ids: string[], courierName?: string, numbers: BulkTracking[] = [], linkTemplate?: string) {
+    const problem = bulkTrackingError(courierName, numbers, linkTemplate);
+    if (problem) throw new BadRequestException(problem);
+    const { error } = readTracking({ courierName });
+    if (error) throw new BadRequestException(error);
+    const numberOf = new Map(numbers.filter((n) => n.trackingNumber.trim()).map((n) => [n.id, n.trackingNumber.trim()]));
+    const found = await this.prisma.order.findMany({ where: { id: { in: ids } }, select: { id: true, status: true } });
+    const plan = planBulkShip(found, ids);
+    const shipped: string[] = [];
+    const skipped = [...plan.skipped];
+    for (const id of plan.ready) {
+      try {
+        const trackingNumber = numberOf.get(id);
+        await this.updateStatus(id, "SHIPPED", { courierName, trackingNumber, trackingUrl: trackingLink(linkTemplate, trackingNumber) });
+        shipped.push(id);
+      } catch (e) {
+        skipped.push({ id, reason: e instanceof HttpException ? e.message : "Could not be shipped" });
+      }
+    }
+    return { shipped, skipped };
+  }
+
+  async updateStatus(id: string, status: OrderStatus, courier?: TrackingInput) {
     const current = await this.prisma.order.findUnique({ where: { id } });
     if (!current) throw new NotFoundException();
+    const { tracking, error } = readTracking(courier);
+    if (error) throw new BadRequestException(error);
+    if (hasTracking(tracking) && status !== "SHIPPED") throw new BadRequestException("Courier details go with the Shipped status");
     if (current.status === status) return this.prisma.order.findUniqueOrThrow({ where: { id }, include: orderInclude });
     if (RELEASED.includes(current.status)) throw new BadRequestException("Cancelled or refunded orders cannot be changed");
 
@@ -309,9 +405,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       if (!order) throw new NotFoundException();
       if (RELEASED.includes(status)) {
         // Units that came back through a return were restocked then.
-        for (const i of order.items) await restock(tx, i, i.quantity - i.returnedQty);
+        for (const i of order.items) await restock(tx, i, i.quantity - i.returnedQty, { reason: "CANCELLED", orderId: id, note: status === "REFUNDED" ? "Order refunded" : "Order cancelled" });
       }
-      return tx.order.update({ where: { id }, data: { status, ...(status === "DELIVERED" && { deliveredAt: new Date() }) }, include: orderInclude });
+      return tx.order.update({ where: { id }, data: { status, ...(status === "DELIVERED" && { deliveredAt: new Date() }), ...(status === "SHIPPED" && { shippedAt: new Date(), ...tracking }) }, include: orderInclude });
     });
     // A refund settles any return still open for this order.
     if (status === "REFUNDED") await this.prisma.returnRequest.updateMany({ where: { orderId: id, status: { in: ["REQUESTED", "APPROVED"] } }, data: { status: "REFUNDED", resolvedAt: new Date() } });
@@ -321,11 +417,21 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return updated;
   }
 
+  // Adds or corrects the courier details of an order that has shipped; the customer sees them in My orders.
+  async setTracking(id: string, input: TrackingInput) {
+    const { tracking, error } = readTracking(input);
+    if (error) throw new BadRequestException(error);
+    const current = await this.prisma.order.findUnique({ where: { id }, select: { status: true } });
+    if (!current) throw new NotFoundException();
+    if (current.status !== "SHIPPED" && current.status !== "DELIVERED") throw new BadRequestException("Courier details can be added once the order is shipped");
+    return this.prisma.order.update({ where: { id }, data: tracking, include: orderInclude });
+  }
+
   // Refunds the full amount of a paid online order through Razorpay; returns whether money was (or already had been) sent back.
-  private async refundIfPaid(order: { id: string; paymentMethod: string; paymentId: string | null; status: OrderStatus; totalPaise: number; refundedPaise: number }) {
+  private async refundIfPaid(order: { id: string; paymentMethod: string; paymentId: string | null; status: OrderStatus; totalPaise: number; advancePaise: number; refundedPaise: number }) {
     if (order.paymentMethod !== "ONLINE" || !order.paymentId || !PAID_STATES.includes(order.status)) return false;
     // Whatever earlier part-returns already sent back is not sent twice.
-    const remaining = order.totalPaise - order.refundedPaise;
+    const remaining = onlineChargePaise(order) - order.refundedPaise;
     if (remaining <= 0) return true;
     await this.refundOnline(order, remaining);
     return true;
@@ -361,7 +467,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
     await this.prisma.$transaction(async (tx) => {
       const items = await tx.orderItem.findMany({ where: { orderId } });
-      for (const i of items) await restock(tx, i, i.quantity - i.returnedQty);
+      for (const i of items) await restock(tx, i, i.quantity - i.returnedQty, { reason: "CANCELLED", orderId, note: "Cancelled by the customer" });
     });
     void this.notify(orderId, "cancelled", refundIssued);
     return this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude });
@@ -373,7 +479,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       const res = await tx.order.updateMany({ where: { id: orderId, status: "PENDING_PAYMENT" }, data: { status: "CANCELLED" } });
       if (res.count === 0) return;
       const items = await tx.orderItem.findMany({ where: { orderId } });
-      for (const i of items) await restock(tx, i, i.quantity);
+      for (const i of items) await restock(tx, i, i.quantity, { reason: "CANCELLED", orderId, note: "Payment was not completed" });
     });
   }
 
@@ -399,17 +505,18 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           ...orderMail(kind, {
             brand: await this.site.brandName(), name: o.user.name, orderRef: orderRef(o.id), items: o.items.map((i) => ({ name: itemName(i.product.name, i.optionLabel), quantity: i.quantity, pricePaise: i.pricePaise })),
             subtotalPaise: o.subtotalPaise || o.totalPaise, discountPaise: o.discountPaise, shippingPaise: o.shippingPaise, totalPaise: o.totalPaise,
-            couponCode: o.couponCode, paymentMethod: o.paymentMethod, refundIssued, url,
+            couponCode: o.couponCode, paymentMethod: o.paymentMethod, refundIssued, url, advancePaise: o.advancePaise,
+            tracking: kind === "shipped" && o.courierName ? { courier: o.courierName, number: o.trackingNumber, url: o.trackingUrl } : undefined,
           }),
         });
       }
       if (o.whatsappOptIn) {
         const phone = (o.shippingAddr as { phone?: string } | null)?.phone;
-        if (phone) await this.whatsapp.sendOrderUpdate(phone, kind, { name: o.user.name, orderRef: orderRef(o.id), totalPaise: o.totalPaise, refundIssued, url });
+        if (phone) await this.whatsapp.sendOrderUpdate(phone, kind, { name: o.user.name, orderRef: orderRef(o.id), totalPaise: o.totalPaise, refundIssued, url, tracking: trackingText(o) });
       }
       // An account with only a phone number would otherwise hear nothing unless it ticked WhatsApp at checkout.
       if (!o.user.email && !o.whatsappOptIn && o.user.phone) {
-        await this.sms.send(o.user.phone, `${await this.site.brandName()}: Hi ${o.user.name}, ${orderUpdateSentence(kind, { totalPaise: o.totalPaise, refundIssued })} Order ${orderRef(o.id)}. ${url}`);
+        await this.sms.send(o.user.phone, `${await this.site.brandName()}: Hi ${o.user.name}, ${orderUpdateSentence(kind, { totalPaise: o.totalPaise, refundIssued, tracking: trackingText(o) })} Order ${orderRef(o.id)}. ${url}`);
       }
     } catch (e) {
       this.log.warn(`Could not send the ${kind} message for order ${orderId}: ${(e as Error).message}`);

@@ -1,18 +1,22 @@
 # 05 Staff guide: the daily routine
 
-You have the **staff console**. It is built for fulfilling orders and helping customers. It deliberately hides money movements, costs, settings and reports.
+You have a **team role** in the admin console. Your admin chose what it covers, so your menu shows only your sections and the system refuses anything else (and records the attempt). This guide describes the day-to-day work of the common roles; your own menu is the truth for you.
 
 ## What you see in the menu
 
-| Screen | You can |
-|---|---|
-| **Orders** | See every order, open details, move orders to Paid, Shipped, Delivered |
-| **Returns** | See return requests, **approve** or **decline** them |
-| **Questions** | Answer or delete customers' product questions |
-| **Products** | Look up products and stock (read-only, no costs) |
-| **Attention** | See what needs care: low stock, missing pictures, no reviews |
+On sign-in you land on a start page with a button for each section your role covers.
 
-You cannot cancel or refund orders, refund returns, mark cash payouts as paid, edit products, or open settings, coupons, users, analytics or the audit log. If you try, the system refuses and records the attempt. Ask an admin for those.
+| Screen | Needs this permission | You can |
+|---|---|---|
+| **Orders** | View orders (+ Process orders to move them) | See every order, open details, move orders to Paid, Shipped, Delivered, add tracking |
+| **Returns** | View returns (+ Approve or decline) | See return requests, **approve** or **decline** them |
+| **Questions** | Answer customer questions | Answer or delete customers' product questions |
+| **Reviews** | Moderate reviews | Read every review and delete the ones that break the rules |
+| **Products** | View products | Look up products and stock (no costs unless your role shows them); with *Create and edit products* you can change them |
+| **Users** | View customers | Look up customers and their orders (customers only) |
+| **Analytics, Audit log, Coupons, Settings...** | The matching permission | Only if your role includes them |
+
+Cancelling or refunding orders, refunding returns and marking cash payouts as paid each need their own permission. Without it the buttons are not shown. If you need one, ask an admin to adjust your role. The rest of this guide describes the routine of the original staff role.
 
 ## A typical day
 
@@ -30,7 +34,7 @@ flowchart LR
 
 1. Open **Orders** and filter to **Placed** (cash on delivery) and **Paid** (online).
 2. Open an order. Check items, quantities and the delivery address and phone.
-3. Pack the parcel. Set the status to **Shipped**. The customer is told automatically.
+3. Pack the parcel. Set the status to **Shipped**, type the courier and tracking number (and the tracking link if the courier gives one) and press **Mark as shipped**. The customer is told automatically, with those details.
 4. When it is delivered, set **Delivered**. The invoice becomes available and the return window starts.
 5. If the customer wants to cancel, they can do it themselves until you ship. After you ship, a cancellation or refund needs an admin.
 

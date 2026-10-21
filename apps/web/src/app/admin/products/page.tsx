@@ -8,6 +8,7 @@ import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls, td, th 
 import { BulkEditPanel } from "@/components/admin/BulkEditPanel";
 import { StaffProducts } from "@/components/admin/StaffProducts";
 import { useAuth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { useLowStockThreshold } from "@/lib/attention";
 import { ProductImportPanel } from "@/components/admin/ProductImportPanel";
 import { API_URL } from "@/lib/api";
@@ -33,10 +34,10 @@ const toPaise = (rupees: string) => {
   return rupees.trim() === "" || !Number.isFinite(n) || n < 0 ? undefined : Math.round(n * 100);
 };
 
-// Staff get a read-only list; the full page with editing is for admins.
+// Without the edit permission the list is read-only; the full page with editing is for those who may change products.
 export default function ProductsPage() {
   const { user } = useAuth();
-  return user?.role === "STAFF" ? <StaffProducts /> : <ProductsAdminPage />;
+  return can(user, "products.edit") ? <ProductsAdminPage /> : <StaffProducts />;
 }
 
 function ProductsAdminPage() {

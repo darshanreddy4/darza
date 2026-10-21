@@ -15,7 +15,7 @@ export function StaffProducts() {
 
   return (
     <>
-      <PageHeader title="Products" description="Stock and prices, for answering customers. Admins make the changes." />
+      <PageHeader title="Products" description="Stock and prices, for answering customers. Changes are made by the catalogue team." />
       {products.error && <Alert tone="error">{products.error}</Alert>}
       <Card padded={false}>
         <div className="border-b border-line p-4">

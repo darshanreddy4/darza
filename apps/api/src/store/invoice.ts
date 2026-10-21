@@ -1,7 +1,9 @@
-export interface InvoiceInputItem { name: string; quantity: number; unitPaise: number; gstRatePercent: number }
+export interface InvoiceInputItem { name: string; quantity: number; unitPaise: number; gstRatePercent: number; hsnCode?: string | null }
 
 export interface InvoiceLine {
   description: string;
+  // HSN or SAC code of the goods; empty for delivery or when none was entered.
+  hsnCode: string | null;
   quantity: number;
   // What the customer paid for the line after its share of the discount (GST included when applicable).
   amountPaise: number;
@@ -47,6 +49,8 @@ export function buildInvoice(input: {
   items: InvoiceInputItem[];
   discountPaise: number;
   shippingPaise: number;
+  // What the delivery line is called; the cash-on-delivery fee is part of it.
+  shippingLabel?: string;
   shippingGstPercent: number;
   gstApplied: boolean;
   // True when seller and buyer are in the same state (CGST + SGST); otherwise IGST.
@@ -57,11 +61,11 @@ export function buildInvoice(input: {
 
   const lines: InvoiceLine[] = input.items.map((item, idx) => {
     const amountPaise = gross[idx] - alloc[idx];
-    return { description: item.name, quantity: item.quantity, amountPaise, gstRatePercent: input.gstApplied ? item.gstRatePercent : 0, ...taxSplit(amountPaise, item.gstRatePercent, input.gstApplied, input.intraState) };
+    return { description: item.name, hsnCode: item.hsnCode ?? null, quantity: item.quantity, amountPaise, gstRatePercent: input.gstApplied ? item.gstRatePercent : 0, ...taxSplit(amountPaise, item.gstRatePercent, input.gstApplied, input.intraState) };
   });
   if (input.shippingPaise > 0) {
     lines.push({
-      description: "Delivery charge", quantity: 1, amountPaise: input.shippingPaise, gstRatePercent: input.gstApplied ? input.shippingGstPercent : 0,
+      description: input.shippingLabel ?? "Delivery charge", hsnCode: null, quantity: 1, amountPaise: input.shippingPaise, gstRatePercent: input.gstApplied ? input.shippingGstPercent : 0,
       ...taxSplit(input.shippingPaise, input.shippingGstPercent, input.gstApplied, input.intraState),
     });
   }

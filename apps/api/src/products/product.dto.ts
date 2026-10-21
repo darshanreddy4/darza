@@ -22,6 +22,10 @@ export class ProductOptionDto {
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) mrpPaise?: number;
   @IsInt() @Min(0) @Max(1_000_000) stock!: number;
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) costPaise?: number;
+  // This option's own SKU, kept apart from the product's.
+  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,63}$/, { message: "an option SKU can have letters, numbers and . _ / - only (no spaces)" }) sku?: string;
+  // Grams per unit.
+  @IsOptional() @IsInt() @Min(1) @Max(1_000_000) weightGrams?: number;
 }
 
 export class ProductDto {
@@ -63,9 +67,17 @@ export class ProductDto {
   @IsOptional() @IsString() @MaxLength(200) warranty?: string;
   @IsOptional() @IsString() @MaxLength(1000) manufacturerInfo?: string;
   @IsOptional() @IsInt() @IsIn([0, 5, 12, 18, 28]) gstRatePercent?: number;
+  // HSN or SAC code for GST invoices: 4, 6 or 8 digits.
+  @IsOptional() @IsString() @Matches(/^\d{4}(\d{2}(\d{2})?)?$/, { message: "hsnCode must be 4, 6 or 8 digits" }) hsnCode?: string;
+  // Customers must pay for it online in full; no pay on delivery.
+  @IsOptional() @IsBoolean() onlineOnly?: boolean;
+  // Part payment: this share is paid online first and the rest on delivery (used while the store has part payment on).
+  @IsOptional() @IsInt() @Min(10) @Max(90) advancePercent?: number;
 
   @IsOptional() @IsString() @MaxLength(64) sku?: string;
   @IsOptional() @IsInt() @Min(0) stock?: number;
+  // Grams per unit, for a product without options (each option has its own).
+  @IsOptional() @IsInt() @Min(1) @Max(1_000_000) weightGrams?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) costPaise?: number;
 
   @IsOptional() @IsString() @MaxLength(60) platform?: string;

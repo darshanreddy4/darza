@@ -21,6 +21,14 @@ test("customer-supplied text is escaped in the HTML", () => {
   assert.ok(orderMail("placed", data).html.includes("Asha &lt;b&gt;"));
 });
 
+test("the shipped email carries the courier, tracking number and link, escaped", () => {
+  const m = orderMail("shipped", { ...data, tracking: { courier: "Blue <i>Dart", number: "7712345", url: "https://courier.example/t/7712345" } });
+  assert.match(m.text, /Courier: Blue <i>Dart\nTracking number: 7712345\nTrack your shipment: https:\/\/courier\.example\/t\/7712345/);
+  assert.ok(m.html.includes("Blue &lt;i&gt;Dart") && m.html.includes('href="https://courier.example/t/7712345"'));
+  assert.ok(!orderMail("shipped", { ...data, tracking: { courier: "Self delivery", number: null, url: "javascript:alert(1)" } }).html.includes("javascript:"));
+  assert.doesNotMatch(orderMail("shipped", data).text, /Courier/);
+});
+
 test("cancelled and refunded emails mention the refund only when one was issued", () => {
   assert.match(orderMail("cancelled", data).text, /started a refund of ₹1,098/);
   assert.doesNotMatch(orderMail("cancelled", { ...data, refundIssued: false }).text, /refund/i);

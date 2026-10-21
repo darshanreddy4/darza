@@ -5,12 +5,21 @@ import { formatPrice } from "@/lib/api";
 import { useState } from "react";
 import { useAdminApi, useAdminQuery, type AdminProduct, type ClickRow } from "@/lib/admin";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, StatCard, btn, td, th } from "@/components/admin/ui";
-import { attentionGroups, useLowStockThreshold, type AttentionGroup } from "@/lib/attention";
+import { attentionGroups, lowOptions, useStockSettings, type AttentionGroup } from "@/lib/attention";
 import { useBrand } from "@/components/BrandProvider";
+import { useAuth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
+import { Workspace } from "@/components/admin/Workspace";
 
+// The business snapshot is for roles that may see both the catalogue and the figures; everyone else gets a start page of what their role covers.
+export default function AdminStart() {
+  const { user } = useAuth();
+  return can(user, "analytics.view") && can(user, "products.view") ? <AdminOverview /> : <Workspace />;
+}
 
-export default function AdminOverview() {
+function AdminOverview() {
   const brand = useBrand();
+  const { user } = useAuth();
   const products = useAdminQuery<AdminProduct[]>("/admin/products");
   const clicks = useAdminQuery<ClickRow[]>("/admin/reports/clicks?days=30");
   const sales = useAdminQuery<{ totals: { orders: number; units: number; revenuePaise: number; profitPaise: number } }>("/admin/analytics/sales?granularity=day");
@@ -21,8 +30,8 @@ export default function AdminOverview() {
   const own = list.filter((p) => p.productType === "OWN");
   const totalClicks = (clicks.data ?? []).reduce((n, c) => n + c.clicks, 0);
   const drafts = list.filter((p) => p.status === "DRAFT");
-  const threshold = useLowStockThreshold();
-  const groups = attentionGroups(list, threshold);
+  const { threshold, optionAlerts } = useStockSettings();
+  const groups = attentionGroups(list, threshold, optionAlerts);
   const topClicks = (clicks.data ?? []).slice(0, 5);
   const maxClicks = Math.max(1, ...topClicks.map((c) => c.clicks));
 
@@ -31,7 +40,7 @@ export default function AdminOverview() {
       <PageHeader
         title="Overview"
         description="A snapshot of your catalogue and affiliate performance."
-        actions={<Link href="/admin/products/new" className={btn.primary}>+ Add product</Link>}
+        actions={can(user, "products.edit") ? <Link href="/admin/products/new" className={btn.primary}>+ Add product</Link> : undefined}
       />
       {(products.error || clicks.error) && <Alert tone="error">{products.error || clicks.error}</Alert>}
 
@@ -73,7 +82,7 @@ export default function AdminOverview() {
         <Card title="Needs attention" className="lg:col-span-2" padded={false} actions={<Link href="/admin/attention" className="text-sm font-medium text-brand-700 hover:underline">Full review →</Link>}>
           {products.loading ? <Skeleton rows={3} /> : (
             <ul className="divide-y divide-line text-sm">
-              {groups.map((g) => <Attention key={g.id} group={g} />)}
+              {groups.map((g) => <Attention key={g.id} group={g} threshold={threshold} />)}
             </ul>
           )}
         </Card>
@@ -99,7 +108,7 @@ export default function AdminOverview() {
         )}
       </Card>
 
-      <SearchIndexCard />
+      {can(user, "settings.manage") && <SearchIndexCard />}
     </>
   );
 }
@@ -133,9 +142,9 @@ function SearchIndexCard() {
   );
 }
 
-function Attention({ group }: { group: AttentionGroup }) {
+function Attention({ group, threshold }: { group: AttentionGroup; threshold: number }) {
   const count = group.products.length;
-  const items = group.products.map((p) => (group.id === "stock" ? `${p.name} (${p.stock ?? 0})` : p.name));
+  const items = group.products.map((p) => (group.id !== "stock" ? p.name : (p.stock ?? 0) > threshold ? `${p.name} (${lowOptions(p, threshold).map((o) => `${o.label}: ${o.stock}`).join(", ")})` : `${p.name} (${p.stock ?? 0})`));
   const row = (
     <>
       <div className="flex items-center justify-between">

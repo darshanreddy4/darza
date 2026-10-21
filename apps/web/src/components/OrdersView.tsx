@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useBrand } from "@/components/BrandProvider";
 import { payForOrder, type PaymentParams } from "@/lib/razorpay";
 import { Select } from "@/components/Select";
+import { OrderProgress } from "@/components/OrderProgress";
 
 interface Order {
   id: string; status: string; totalPaise: number; createdAt: string; paymentMethod: string;
@@ -16,6 +17,10 @@ interface Order {
   returns: { id: string; status: "REQUESTED" | "APPROVED" | "REJECTED" | "REFUNDED"; reason: string; adminNote: string | null; refundPaise: number | null; payoutUpi: string | null; paidOutAt: string | null; items: { orderItemId: string; quantity: number }[] }[];
   returnableUntil: string | null;
   cancelReason: string | null;
+  courierName: string | null; trackingNumber: string | null; trackingUrl: string | null;
+  shippedAt: string | null; deliveredAt: string | null;
+  // Part payment: the share paid online up front; the rest is paid on delivery. 0 for an ordinary order.
+  advancePaise: number;
 }
 
 const RETURN_REASONS = ["Damaged or defective", "Wrong item received", "Item not as described", "Size or fit issue", "Changed my mind", "Other"];
@@ -38,7 +43,7 @@ function ReturnPanel({ order, onDone }: { order: Order; onDone: () => void }) {
     if (items.length === 0) return setError("Choose at least one item to return.");
     setBusy(true);
     try {
-      const res = await fetch(`${API_URL}/orders/${order.id}/return`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: f.get("reason"), details: String(f.get("details") ?? "").trim() || undefined, items, upiId: order.paymentMethod === "COD" ? String(f.get("upiId") ?? "").trim() : undefined }) });
+      const res = await fetch(`${API_URL}/orders/${order.id}/return`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: f.get("reason"), details: String(f.get("details") ?? "").trim() || undefined, items, upiId: order.paymentMethod === "COD" || order.advancePaise > 0 ? String(f.get("upiId") ?? "").trim() : undefined }) });
       if (!res.ok) { const d = await res.json().catch(() => null); throw new Error([d?.message].flat().filter(Boolean).join(", ") || "Could not send your request"); }
       setOpen(false); setBusy(false); onDone();
     } catch (err) { setError((err as Error).message); setBusy(false); }
@@ -83,10 +88,10 @@ function ReturnPanel({ order, onDone }: { order: Order; onDone: () => void }) {
               {RETURN_REASONS.map((x) => <option key={x}>{x}</option>)}
             </Select>
           </label>
-          {order.paymentMethod === "COD" && (
+          {(order.paymentMethod === "COD" || order.advancePaise > 0) && (
             <label className="block font-medium">UPI ID for your refund
               <input name="upiId" required maxLength={80} autoComplete="off" placeholder="name@bank" className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm" />
-              <span className="mt-1.5 block text-xs font-normal text-muted">You paid in cash, so we send your refund to this UPI ID once the items reach us.</span>
+              <span className="mt-1.5 block text-xs font-normal text-muted">{order.advancePaise > 0 ? "You paid part of this order in cash, so any refund beyond your online payment is sent to this UPI ID once the items reach us." : "You paid in cash, so we send your refund to this UPI ID once the items reach us."}</span>
             </label>
           )}
           <label className="block font-medium">Details (optional)
@@ -159,6 +164,11 @@ export function OrdersView({ placed, reason }: { placed?: "1" | "paid" | "unpaid
   const [version, setVersion] = useState(0);
   const [paying, setPaying] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
+  // The store can switch the progress bar off; it stays hidden until we know.
+  const [progress, setProgress] = useState(false);
+  useEffect(() => {
+    fetch(`${API_URL}/store/config`).then((r) => (r.ok ? r.json() : null)).then((c) => setProgress(c?.orderProgressEnabled === true)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (ready && !user) router.replace("/login?next=/orders");
@@ -217,6 +227,7 @@ export function OrdersView({ placed, reason }: { placed?: "1" | "paid" | "unpaid
                 <span className="text-muted">Placed {new Date(o.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" })} · #{o.id.slice(-8).toUpperCase()}</span>
                 <span className="rounded-full bg-canvas px-3 py-1 text-xs font-semibold ring-1 ring-line">{STATUS_LABEL[o.status] ?? o.status}</span>
               </div>
+              {progress && <OrderProgress status={o.status} createdAt={o.createdAt} shippedAt={o.shippedAt} deliveredAt={o.deliveredAt} courierName={o.courierName} />}
               <ul className="mt-3 divide-y divide-line text-sm">
                 {o.items.map((i) => (
                   <li key={i.id} className="flex justify-between gap-3 py-2"><span><Link href={`/products/${i.product.slug}`} className="hover:text-brand-700">{i.product.name}{i.optionLabel ? ` (${i.optionLabel})` : ""} × {i.quantity}</Link>{i.returnWindowDays === 0 && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Non-returnable</span>}</span><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>
@@ -233,16 +244,23 @@ export function OrdersView({ placed, reason }: { placed?: "1" | "paid" | "unpaid
               {o.gifts?.length > 0 && <p className="mt-2 text-sm font-medium text-brand-700">Free gift with this order: {o.gifts.join(", ")}</p>}
               {o.refundedPaise > 0 && <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">{formatPrice(o.refundedPaise)} was refunded to your original payment method. Banks usually take 5-7 business days to show it.</p>}
               {o.status === "CANCELLED" && o.cancelReason && <p className="mt-2 text-xs text-muted">Cancellation reason: {o.cancelReason}</p>}
+              {(o.status === "SHIPPED" || o.status === "DELIVERED") && o.courierName && (
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-canvas px-3 py-2 text-sm" data-testid="tracking">
+                  <span>Shipped with <strong>{o.courierName}</strong></span>
+                  {o.trackingNumber && <span>Tracking no. <strong className="font-mono">{o.trackingNumber}</strong></span>}
+                  {o.trackingUrl && <a href={o.trackingUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-700 hover:underline">Track shipment</a>}
+                </p>
+              )}
               <CancelPanel order={o} onDone={() => setVersion((v) => v + 1)} />
               <ReturnPanel order={o} onDone={() => setVersion((v) => v + 1)} />
               <div className="mt-3 flex items-center justify-between gap-3">
                 {o.status === "PENDING_PAYMENT" && o.paymentMethod === "ONLINE" ? (
                   <button onClick={() => payNow(o.id)} disabled={paying === o.id} className="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-ink hover:bg-brand-600 disabled:opacity-60">
-                    {paying === o.id ? "Opening payment…" : "Pay now"}
+                    {paying === o.id ? "Opening payment…" : o.advancePaise > 0 ? `Pay ${formatPrice(o.advancePaise)} now` : "Pay now"}
                   </button>
                 ) : (
                   <span className="text-xs text-muted">
-                    {o.paymentMethod === "COD" ? "Pay on delivery" : "Paid online"}
+                    {o.paymentMethod === "COD" ? "Pay on delivery" : o.advancePaise > 0 ? `Paid ${formatPrice(o.advancePaise)} online · ${o.status === "DELIVERED" ? "balance collected" : `${formatPrice(o.totalPaise - o.advancePaise)} to pay on delivery`}` : "Paid online"}
                     {o.status !== "PENDING_PAYMENT" && o.status !== "CANCELLED" && <> · <Link href={`/invoice/${o.id}`} target="_blank" className="font-semibold text-brand-700 hover:underline">Invoice</Link></>}
                   </span>
                 )}

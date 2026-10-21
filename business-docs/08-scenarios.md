@@ -107,10 +107,10 @@ Staff and admin accounts cannot delete themselves; another admin changes the rol
 
 ---
 
-## 10. Staff tries something only an admin may do
+## 10. A team member tries something their role does not allow
 
-1. **Staff** opens an order and tries to set it to **Cancelled**.
-2. **System** refuses ("Only an admin can ..."). Staff menus do not even show settings, coupons, users or reports.
+1. A **customer care executive** opens an order and tries to set it to **Cancelled**.
+2. **System** refuses ("Your role cannot do this ..."). Their menu does not even show settings, coupons, analytics or the team. The **Finance** role, which has the cancel and refund permission, can do it.
 3. The attempt is written to the **audit log** as a blocked action with the person's name.
 
 The same applies to refunding a return, marking a payout paid, editing products, and seeing cost prices. See [Roles and permissions](03-roles-and-permissions.md).

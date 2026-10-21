@@ -8,10 +8,11 @@ import { Select } from "@/components/Select";
 
 interface Settings {
   shippingFeePaise: number; freeShippingOverPaise: number | null; freeAllOverPaise: number | null;
+  codEnabled: boolean; codFeePaise: number; codMaxOrderPaise: number | null; advanceEnabled: boolean;
   deliveryZones: { name: string; pincodes: string[]; feePaise: number; freeOverPaise: number | null }[];
   giftTiers: { atPaise: number; title: string; kind?: "PERCENT"; percent?: number; maxPaise?: number }[];
   gstEnabled: boolean; gstin: string | null; legalName: string | null;
-  businessAddress: string | null; businessState: string | null; shippingGstPercent: number; invoicePrefix: string; nextInvoiceNo: number; returnWindowDays: number; lowStockThreshold: number; alertEmail: string | null; reportSchedule: "OFF" | "WEEKLY" | "MONTHLY"; reportEmail: string | null; reportLastSentAt: string | null;
+  businessAddress: string | null; businessState: string | null; shippingGstPercent: number; invoicePrefix: string; nextInvoiceNo: number; returnWindowDays: number; lowStockThreshold: number; skuWeightEnabled: boolean; optionStockAlerts: boolean; orderProgressEnabled: boolean; guestCheckoutEnabled: boolean; guestCodEnabled: boolean; guestMinAdvancePaise: number; alertEmail: string | null; reportSchedule: "OFF" | "WEEKLY" | "MONTHLY"; reportEmail: string | null; reportLastSentAt: string | null;
 }
 
 const toRupees = (paise: number | null) => (paise === null ? "" : String(paise / 100));
@@ -51,7 +52,18 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
   const [shipGst, setShipGst] = useState(String(initial.shippingGstPercent));
   const [prefix, setPrefix] = useState(initial.invoicePrefix);
   const [returnDays, setReturnDays] = useState(String(initial.returnWindowDays));
+  const [codOn, setCodOn] = useState(initial.codEnabled);
+  const [codFee, setCodFee] = useState(toRupees(initial.codFeePaise));
+  const [codLimitOn, setCodLimitOn] = useState(initial.codMaxOrderPaise !== null);
+  const [codLimit, setCodLimit] = useState(toRupees(initial.codMaxOrderPaise ?? 500000));
+  const [advanceOn, setAdvanceOn] = useState(initial.advanceEnabled);
   const [lowStock, setLowStock] = useState(String(initial.lowStockThreshold));
+  const [skuWeightOn, setSkuWeightOn] = useState(initial.skuWeightEnabled ?? false);
+  const [optionAlertsOn, setOptionAlertsOn] = useState(initial.optionStockAlerts ?? false);
+  const [progressOn, setProgressOn] = useState(initial.orderProgressEnabled ?? true);
+  const [guestOn, setGuestOn] = useState(initial.guestCheckoutEnabled ?? false);
+  const [guestCodOn, setGuestCodOn] = useState(initial.guestCodEnabled ?? true);
+  const [guestMin, setGuestMin] = useState(toRupees(initial.guestMinAdvancePaise ?? 5000));
   const [alertEmail, setAlertEmail] = useState(initial.alertEmail ?? "");
   const [reportSchedule, setReportSchedule] = useState(initial.reportSchedule);
   const [reportEmail, setReportEmail] = useState(initial.reportEmail ?? "");
@@ -82,18 +94,21 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
     if (!Number.isInteger(Number(returnDays)) || Number(returnDays) < 0 || Number(returnDays) > 90) return setError("Return window must be a whole number of days from 0 to 90");
     if (reportSchedule !== "OFF" && !reportEmail.trim()) return setError("Add the email address the sales report should go to");
     if (!Number.isInteger(Number(lowStock)) || Number(lowStock) < 0 || Number(lowStock) > 1000) return setError("Low stock level must be a whole number from 0 to 1000");
+    if (guestOn && guestCodOn && (!Number.isFinite(Number(guestMin)) || Number(guestMin) < 0)) return setError("Enter the least a guest pays online, or 0");
     setBusy(true);
     try {
       await call("/admin/settings", {
         method: "PUT",
         body: JSON.stringify({
           shippingFeePaise: toPaise(fee), freeShippingOverPaise: freeOn ? toPaise(freeOver) : 0, freeAllOverPaise: freeAllOn ? toPaise(freeAll) : 0,
+          codEnabled: codOn, codFeePaise: toPaise(codFee), codMaxOrderPaise: codLimitOn ? toPaise(codLimit) : 0, advanceEnabled: advanceOn,
           deliveryZones: zones.map((z) => ({ name: z.name.trim(), pincodes: splitPins(z.pincodes), feePaise: toPaise(z.fee), freeOverPaise: z.freeOn ? toPaise(z.freeOver) : 0 })),
           giftTiers: gifts.map((g) => (g.kind === "PERCENT"
             ? { atPaise: toPaise(g.at), title: `${Number(g.percent)}% off your order`, kind: "PERCENT", percent: Number(g.percent), maxDiscountPaise: g.max ? toPaise(g.max) : 0 }
             : { atPaise: toPaise(g.at), title: g.title.trim() })),
           gstEnabled, gstin: gstin.trim().toUpperCase(), legalName: legalName.trim(), businessAddress: address.trim(), businessState: state,
-          shippingGstPercent: Number(shipGst), invoicePrefix: prefix.trim().toUpperCase(), returnWindowDays: Number(returnDays), lowStockThreshold: Number(lowStock), alertEmail: alertEmail.trim(), reportSchedule, reportEmail: reportEmail.trim(),
+          shippingGstPercent: Number(shipGst), invoicePrefix: prefix.trim().toUpperCase(), returnWindowDays: Number(returnDays), lowStockThreshold: Number(lowStock), skuWeightEnabled: skuWeightOn, optionStockAlerts: optionAlertsOn, orderProgressEnabled: progressOn,
+          guestCheckoutEnabled: guestOn, guestCodEnabled: guestCodOn, guestMinAdvancePaise: Number.isFinite(Number(guestMin)) ? toPaise(guestMin) : 5000, alertEmail: alertEmail.trim(), reportSchedule, reportEmail: reportEmail.trim(),
         }),
       });
       setNotice("Settings saved");
@@ -147,6 +162,87 @@ function SettingsForm({ initial, onSaved }: { initial: Settings; onSaved: () => 
             The free-delivery amount above is measured on the whole basket, but it only waives the charge on regular products. A product marked &ldquo;always charge delivery&rdquo; (set on its edit page) is still charged its own delivery in a big order,
             until the whole order reaches the free-everything amount. Products marked &ldquo;always free&rdquo; never add to the charge.
           </p>
+        </div>
+      </Card>
+
+      <Card title="Pay on delivery" description="Cash or UPI paid to the courier. Many sellers add a small fee and a limit, because returns on these orders cost the most.">
+        <div className="space-y-4 text-sm">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={codOn} onChange={(e) => setCodOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span><span className="font-medium">Offer pay on delivery</span><br /><span className="text-xs text-muted">Switch it off to take online payments only. Make sure online payments are set up first, or customers will have no way to pay.</span></span>
+          </label>
+          {codOn && (
+            <>
+              <label className={`${label} ml-7`}>Extra fee for pay on delivery (₹)
+                <input type="number" min={0} step="0.01" value={codFee} onChange={(e) => setCodFee(e.target.value)} className={`${inputCls} mt-1.5 !w-40`} />
+                <span className={hint}>Added to the order total only when the customer chooses pay on delivery, and shown at checkout. Enter 0 for no fee.</span>
+              </label>
+              <label className="ml-7 flex items-start gap-3">
+                <input type="checkbox" checked={codLimitOn} onChange={(e) => setCodLimitOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                <span><span className="font-medium">Limit the order size</span><br /><span className="text-xs text-muted">Bigger orders must be paid online.</span></span>
+              </label>
+              {codLimitOn && (
+                <label className={`${label} ml-14`}>Pay on delivery up to (₹)
+                  <input type="number" min={1} step="0.01" value={codLimit} onChange={(e) => setCodLimit(e.target.value)} className={`${inputCls} mt-1.5 !w-40`} />
+                </label>
+              )}
+            </>
+          )}
+        </div>
+      </Card>
+
+      <Card title="Part payment" description="Let customers pay a share online when they order (often 30 to 40 percent) and the rest to the courier on delivery. It suits big or costly items, where cash-only orders get refused at the door.">
+        <div className="space-y-3 text-sm">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={advanceOn} onChange={(e) => setAdvanceOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span><span className="font-medium">Offer part payment</span><br /><span className="text-xs text-muted">Turns on a &ldquo;How customers can pay&rdquo; choice on each product, where you set the share for the products that should use it. Customers see it on those products and at checkout, and it needs online payments to be set up. A basket can be part-paid only when every product in it allows it.</span></span>
+          </label>
+        </div>
+      </Card>
+
+      <Card title="Guest checkout" description="Let shoppers order without creating an account: they confirm their mobile number with a code and no password is needed. Guest orders carry less risk because the shopper pays before anything ships.">
+        <div className="space-y-4 text-sm">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={guestOn} onChange={(e) => setGuestOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span><span className="font-medium">Allow guest checkout</span><br /><span className="text-xs text-muted">Shoppers who are not signed in can continue with just a name and a mobile number. Behind the scenes a simple account is kept for them so they can track and return orders by signing in with a code. They stop being guests once they set a password or confirm an email. Needs text messages (SMS) and online payments to be set up.</span></span>
+          </label>
+          {guestOn && (
+            <div className="ml-7 space-y-4">
+              <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">A guest can always pay in full online. Pay on delivery in full is never offered to guests.</p>
+              <label className="flex items-start gap-3">
+                <input type="checkbox" checked={guestCodOn} onChange={(e) => setGuestCodOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                <span><span className="font-medium">Let guests pay the delivery charge now and the rest on delivery</span><br /><span className="text-xs text-muted">They pay the delivery charge (and your pay-on-delivery fee, if any) online first, and the rest in cash or by UPI to the courier. It follows your pay-on-delivery limit and products that must be paid online.</span></span>
+              </label>
+              {guestCodOn && (
+                <label className={label}>Least a guest pays online (₹)
+                  <input type="number" min={0} step="0.01" value={guestMin} onChange={(e) => setGuestMin(e.target.value)} className={`${inputCls} mt-1.5 !w-40`} />
+                  <span className={hint}>Used when delivery is free or very cheap, so a guest still commits something. Enter 0 to charge only the delivery.</span>
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card title="Order progress bar" description="Lets customers see where their order is without contacting you.">
+        <div className="space-y-3 text-sm">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={progressOn} onChange={(e) => setProgressOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span><span className="font-medium">Show an order progress bar on My orders</span><br /><span className="text-xs text-muted">Each order shows four steps: order placed, preparing, shipped (with the date and courier) and delivered. It follows the status you set on the Orders screen. Cancelled and refunded orders show no bar. Switch it off if you prefer customers to see only the status.</span></span>
+          </label>
+        </div>
+      </Card>
+
+      <Card title="Weights, SKUs and option stock" description="Optional extras for products that come in sizes, colours or weights. Switching one off hides it; what you already saved is kept.">
+        <div className="space-y-4 text-sm">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={skuWeightOn} onChange={(e) => setSkuWeightOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span><span className="font-medium">Record weight and a SKU for each option</span><br /><span className="text-xs text-muted">Adds a weight (in grams) to every product and a SKU and weight to every option on the product page. Packing slips and labels then show the SKU of the exact option bought and the weight of the parcel.</span></span>
+          </label>
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={optionAlertsOn} onChange={(e) => setOptionAlertsOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span><span className="font-medium">Low stock alerts for each option</span><br /><span className="text-xs text-muted">Today a product counts as low only when all its options together are low. With this on, one option at or below the low stock level (say size L down to 2 while XL has 40) also appears on the Attention list and in the low stock email.</span></span>
+          </label>
         </div>
       </Card>
 

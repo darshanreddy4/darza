@@ -1,7 +1,7 @@
 import { Controller, Get, Query, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { Prisma } from "@prisma/client";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { PrismaService } from "../prisma.service";
 import { BUCKET_FORMAT, dateRange, netFigures, parseGranularity } from "./analytics-utils";
 import { loadReportData } from "./report-data";
@@ -22,7 +22,7 @@ const n = (v: bigint | number | null | undefined) => Number(v ?? 0);
 
 @Controller("admin/analytics")
 @UseGuards(AuthGuard)
-@Roles("ADMIN")
+@Permit("analytics.view")
 export class AnalyticsController {
   constructor(private prisma: PrismaService) {}
 

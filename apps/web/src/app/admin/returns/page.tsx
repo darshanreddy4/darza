@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatPrice } from "@/lib/api";
 import { useAdminApi, useAdminQuery } from "@/lib/admin";
 import { useAuth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn, inputCls } from "@/components/admin/ui";
 import { Select } from "@/components/Select";
 
@@ -11,9 +12,9 @@ interface ReturnRow {
   id: string; status: "REQUESTED" | "APPROVED" | "REJECTED" | "REFUNDED"; reason: string; details: string | null; adminNote: string | null; createdAt: string;
   user: { name: string; email: string | null; phone: string | null };
   items: { id: string; orderItemId: string; quantity: number; orderItem: { pricePaise: number; optionLabel: string | null; product: { name: string } } }[];
-  refundPreviewPaise: number; refundPaise: number | null;
+  refundPreviewPaise: number; refundPaise: number | null; payoutTotalPaise: number;
   payoutUpi: string | null; payoutRef: string | null; paidOutAt: string | null; payoutDue: boolean;
-  order: { id: string; status: string; totalPaise: number; paymentMethod: string; refundedPaise: number };
+  order: { id: string; status: string; totalPaise: number; paymentMethod: string; advancePaise: number; refundedPaise: number };
 }
 
 const STATUSES = ["REQUESTED", "APPROVED", "REJECTED", "REFUNDED"] as const;
@@ -22,7 +23,10 @@ const TONE: Record<string, "amber" | "green" | "red" | "slate"> = { REQUESTED: "
 
 export default function ReturnsPage() {
   const call = useAdminApi();
-  const staff = useAuth().user?.role === "STAFF";
+  const me = useAuth().user;
+  // Approving or declining and sending money back are separate permissions.
+  const canDecide = can(me, "returns.decide");
+  const canRefund = can(me, "returns.refund");
   const [filter, setFilter] = useState("REQUESTED");
   // "Payouts due" is the refunded pay-on-delivery returns still waiting for the money to be sent.
   const rows = useAdminQuery<ReturnRow[]>(`/admin/returns${filter === "PAYOUT" ? "?status=REFUNDED" : filter ? `?status=${filter}` : ""}`);
@@ -34,7 +38,7 @@ export default function ReturnsPage() {
   const [busy, setBusy] = useState<string | null>(null);
 
   async function act(r: ReturnRow, action: "approve" | "reject" | "refund" | "paid") {
-    if (action === "refund" && !confirm(`Refund ${formatPrice(r.refundPreviewPaise)} for these items on order #${r.order.id.slice(-8).toUpperCase()}? The items go back into stock and this cannot be undone.${r.order.paymentMethod === "ONLINE" ? " The money is refunded through Razorpay." : ` This order was pay on delivery: it will be listed under Payouts due so you can send the money to ${r.payoutUpi ?? "the customer"} and record the reference.`}`)) return;
+    if (action === "refund" && !confirm(`Refund ${formatPrice(r.refundPreviewPaise)} for these items on order #${r.order.id.slice(-8).toUpperCase()}? The items go back into stock and this cannot be undone.${r.order.advancePaise > 0 ? ` This order was part-paid: what was paid online (${formatPrice(r.order.advancePaise)} at most) goes back through Razorpay, and any rest is listed under Payouts due so you can send it to ${r.payoutUpi ?? "the customer"} and record the reference.` : r.order.paymentMethod === "ONLINE" ? " The money is refunded through Razorpay." : ` This order was pay on delivery: it will be listed under Payouts due so you can send the money to ${r.payoutUpi ?? "the customer"} and record the reference.`}`)) return;
     setError(""); setNotice(""); setBusy(r.id);
     try {
       await call(`/admin/returns/${r.id}`, { method: "PATCH", body: JSON.stringify({ action, note: notes[r.id]?.trim() || undefined, reference: action === "paid" ? refs[r.id]?.trim() || undefined : undefined }) });
@@ -74,13 +78,13 @@ export default function ReturnsPage() {
                   </div>
                   <p><span className="font-medium">{r.reason}</span>{r.details && <span className="text-muted"> · {r.details}</span>}</p>
                   <ul className="text-xs text-muted">{r.items.map((i) => <li key={i.id}>{i.orderItem.product.name}{i.orderItem.optionLabel ? ` (${i.orderItem.optionLabel})` : ""} × {i.quantity} · {formatPrice(i.orderItem.pricePaise * i.quantity)}</li>)}</ul>
-                  <p className="text-xs text-muted">Order total {formatPrice(r.order.totalPaise)} · {r.order.paymentMethod === "ONLINE" ? "paid online" : "pay on delivery"} · {r.status === "REFUNDED" ? `refunded ${formatPrice(r.refundPaise ?? 0)}` : `refund would be ${formatPrice(r.refundPreviewPaise)}`} · requested {new Date(r.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</p>
+                  <p className="text-xs text-muted">Order total {formatPrice(r.order.totalPaise)} · {r.order.paymentMethod === "ONLINE" ? (r.order.advancePaise > 0 ? "part paid online" : "paid online") : "pay on delivery"} · {r.status === "REFUNDED" ? `refunded ${formatPrice(r.refundPaise ?? 0)}` : `refund would be ${formatPrice(r.refundPreviewPaise)}`} · requested {new Date(r.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</p>
                   {r.adminNote && <p className="rounded-lg bg-canvas px-3 py-2 text-xs">Note sent to customer: {r.adminNote}</p>}
                   {r.paidOutAt && <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">Paid to {r.payoutUpi ?? "the customer"} on {new Date(r.paidOutAt).toLocaleDateString("en-IN", { dateStyle: "medium" })} · reference {r.payoutRef}</p>}
                   {r.payoutDue && (
                     <div className="space-y-3 border-t border-line pt-3">
-                      <p className="text-xs">Send <strong>{formatPrice(r.refundPaise ?? 0)}</strong> to UPI ID <strong className="font-mono">{r.payoutUpi ?? "(none given)"}</strong>, then record the transaction reference.</p>
-                      {staff ? <p className="text-xs text-muted">An admin records the payout.</p> : (
+                      <p className="text-xs">Send <strong>{formatPrice(r.payoutTotalPaise || (r.refundPaise ?? 0))}</strong> to UPI ID <strong className="font-mono">{r.payoutUpi ?? "(none given)"}</strong>, then record the transaction reference.</p>
+                      {!canRefund ? <p className="text-xs text-muted">Someone with refund access records the payout.</p> : (
                         <div className="flex flex-wrap items-end gap-2">
                           <label className="block text-xs font-medium">UPI transaction reference
                             <input value={refs[r.id] ?? ""} maxLength={100} onChange={(e) => setRefs({ ...refs, [r.id]: e.target.value })} className={`${inputCls} mt-1`} />
@@ -91,15 +95,15 @@ export default function ReturnsPage() {
                     </div>
                   )}
 
-                  {(r.status === "REQUESTED" || r.status === "APPROVED") && (
+                  {((r.status === "REQUESTED" && canDecide) || (r.status === "APPROVED" && (canDecide || canRefund))) && (
                     <div className="space-y-3 border-t border-line pt-3">
                       <label className="block text-xs font-medium">Note to the customer {r.status === "REQUESTED" ? "(needed to decline)" : "(optional)"}
                         <input value={notes[r.id] ?? ""} maxLength={500} onChange={(e) => setNotes({ ...notes, [r.id]: e.target.value })} className={`${inputCls} mt-1`} />
                       </label>
                       <div className="flex flex-wrap gap-2">
-                        {r.status === "REQUESTED" && <button disabled={busy === r.id} onClick={() => act(r, "approve")} className={btn.primary}>Approve return</button>}
-                        {r.status === "APPROVED" && !staff && <button disabled={busy === r.id} onClick={() => act(r, "refund")} className={btn.primary}>Item received, refund</button>}
-                        <button disabled={busy === r.id} onClick={() => act(r, "reject")} className={btn.danger}>Decline</button>
+                        {r.status === "REQUESTED" && canDecide && <button disabled={busy === r.id} onClick={() => act(r, "approve")} className={btn.primary}>Approve return</button>}
+                        {r.status === "APPROVED" && canRefund && <button disabled={busy === r.id} onClick={() => act(r, "refund")} className={btn.primary}>Item received, refund</button>}
+                        {canDecide && <button disabled={busy === r.id} onClick={() => act(r, "reject")} className={btn.danger}>Decline</button>}
                       </div>
                     </div>
                   )}

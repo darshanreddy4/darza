@@ -2,7 +2,7 @@ import { CallHandler, Controller, ExecutionContext, Get, Global, HttpException, 
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import type { Role } from "@prisma/client";
 import { Observable, tap } from "rxjs";
-import { AuthGuard, Roles, type JwtPayload } from "../auth/auth.guard";
+import { AuthGuard, Permit, type JwtPayload } from "../auth/auth.guard";
 import { describeAction } from "./audit-describe";
 import { AuditService } from "./audit-log.service";
 
@@ -26,7 +26,7 @@ export class AuditInterceptor implements NestInterceptor {
 
 @Controller("admin/audit-log")
 @UseGuards(AuthGuard)
-@Roles("ADMIN")
+@Permit("audit.view")
 export class AuditController {
   constructor(private audit: AuditService) {}
 

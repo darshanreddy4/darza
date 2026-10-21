@@ -16,6 +16,10 @@ export interface OrderMailData {
   // True when money is being sent back to the customer's payment method.
   refundIssued: boolean;
   url: string;
+  // Shipped mail only: who is carrying the parcel and how to follow it.
+  tracking?: { courier: string; number: string | null; url: string | null };
+  // Part payment: the share paid online up front; the rest of totalPaise is paid on delivery.
+  advancePaise?: number;
 }
 
 const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -54,17 +58,24 @@ export function orderMail(kind: OrderMailKind, d: OrderMailData) {
   rows.push(["Delivery", d.shippingPaise > 0 ? inr(d.shippingPaise) : "Free"], ["Total", inr(d.totalPaise)]);
 
   const lines = d.items.map((i) => `${i.name} x ${i.quantity}   ${inr(i.pricePaise * i.quantity)}`);
-  const text = [`Hi ${d.name},`, "", copy.intro(d), "", `Order ${d.orderRef}`, ...lines, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", `View your order: ${d.url}`, "", `- ${d.brand}`].join("\n");
+  const t = d.tracking;
+  // A part-paid order says what was paid online and what is left for the courier; a cancelled or refunded one has nothing left to collect.
+  const balance = d.advancePaise && d.advancePaise > 0 && d.advancePaise < d.totalPaise && kind !== "cancelled" && kind !== "refunded" && kind !== "delivered"
+    ? `Paid online: ${inr(d.advancePaise)}. To pay on delivery: ${inr(d.totalPaise - d.advancePaise)}.` : "";
+  const trackLines = t ? [`Courier: ${t.courier}`, ...(t.number ? [`Tracking number: ${t.number}`] : []), ...(t.url ? [`Track your shipment: ${t.url}`] : [])] : [];
+  const text = [`Hi ${d.name},`, "", copy.intro(d), "", ...(trackLines.length ? [...trackLines, ""] : []), `Order ${d.orderRef}`, ...lines, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", ...(balance ? [balance, ""] : []), `View your order: ${d.url}`, "", `- ${d.brand}`].join("\n");
 
   const cell = "padding:6px 0;border-bottom:1px solid #eee;font-size:14px";
   const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#111">
 <h2 style="margin:0 0 4px">${esc(copy.heading)}</h2>
 <p style="margin:0 0 16px;color:#555">Order ${esc(d.orderRef)}</p>
 <p>Hi ${esc(d.name)},</p><p>${esc(copy.intro(d))}</p>
+${t ? `<p style="background:#f6f6f6;border-radius:10px;padding:12px 14px;font-size:14px">Courier: <b>${esc(t.courier)}</b>${t.number ? `<br>Tracking number: <b>${esc(t.number)}</b>` : ""}${t.url && /^https:\/\//.test(t.url) ? `<br><a href="${esc(t.url)}">Track your shipment</a>` : ""}</p>` : ""}
 <table style="width:100%;border-collapse:collapse;margin:16px 0">
 ${d.items.map((i) => `<tr><td style="${cell}">${esc(i.name)} &times; ${i.quantity}</td><td style="${cell};text-align:right">${esc(inr(i.pricePaise * i.quantity))}</td></tr>`).join("")}
 ${rows.map(([k, v], idx) => `<tr><td style="padding:6px 0;font-size:14px;${idx === rows.length - 1 ? "font-weight:bold" : "color:#555"}">${esc(k)}</td><td style="padding:6px 0;font-size:14px;text-align:right;${idx === rows.length - 1 ? "font-weight:bold" : ""}">${esc(v)}</td></tr>`).join("")}
 </table>
+${balance ? `<p style="font-size:14px;font-weight:bold">${esc(balance)}</p>` : ""}
 <p><a href="${esc(d.url)}" style="display:inline-block;background:#10b981;color:#111;font-weight:bold;text-decoration:none;padding:12px 20px;border-radius:10px">View your order</a></p>
 <p style="font-size:12px;color:#777">Payment method: ${d.paymentMethod === "ONLINE" ? "Paid online" : "Pay on delivery"}</p></div>`;
 

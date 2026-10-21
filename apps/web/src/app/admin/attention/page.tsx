@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { formatPrice, imgSrc } from "@/lib/api";
 import { useAdminQuery, type AdminProduct } from "@/lib/admin";
-import { attentionGroups, useLowStockThreshold, type AttentionGroup } from "@/lib/attention";
+import { attentionGroups, lowOptions, useStockSettings, type AttentionGroup } from "@/lib/attention";
 import { Alert, Badge, Card, Empty, PageHeader, Skeleton, btn } from "@/components/admin/ui";
 import { useBrand } from "@/components/BrandProvider";
 
-function Reason({ group, p, waiting }: { group: AttentionGroup; p: AdminProduct; waiting: number }) {
+function Reason({ group, p, waiting, threshold }: { group: AttentionGroup; p: AdminProduct; waiting: number; threshold: number }) {
+  // The product as a whole is fine; only some of its options are running low.
+  if (group.id === "stock" && (p.stock ?? 0) > threshold) return <span className="flex flex-wrap justify-end gap-1.5">{lowOptions(p, threshold).map((o) => <Badge key={o.id} tone={o.stock === 0 ? "red" : "amber"}>{o.label}: {o.stock === 0 ? "out" : `${o.stock} left`}</Badge>)}</span>;
   if (group.id === "stock") return (p.stock ?? 0) === 0 ? <span className="flex items-center gap-2">{waiting > 0 && <Badge tone="slate">{waiting} waiting for it</Badge>}<Badge tone="red">Out of stock</Badge></span> : <Badge tone="amber">Only {p.stock} left</Badge>;
   if (group.id === "drafts") return <Badge tone="slate">Draft</Badge>;
   return <Badge tone="amber">No images</Badge>;
@@ -18,8 +20,8 @@ export default function AttentionPage() {
   const products = useAdminQuery<AdminProduct[]>("/admin/products");
   const alerts = useAdminQuery<{ productId: string; waiting: number }[]>("/admin/stock-alerts");
   const waiting = new Map((alerts.data ?? []).map((a) => [a.productId, a.waiting]));
-  const threshold = useLowStockThreshold();
-  const groups = attentionGroups(products.data ?? [], threshold);
+  const { threshold, optionAlerts } = useStockSettings();
+  const groups = attentionGroups(products.data ?? [], threshold, optionAlerts);
   const total = new Set(groups.flatMap((g) => g.products.map((p) => p.id))).size;
 
   return (
@@ -49,7 +51,7 @@ export default function AttentionPage() {
                       <Link href={`/admin/products/${p.id}`} className="block truncate font-medium hover:text-brand-700">{p.name}</Link>
                       <p className="truncate text-xs text-muted">{p.productType === "OWN" ? `Sold by ${brand}${p.sku ? ` · ${p.sku}` : ""}` : `Partner · ${p.platform}`} · {formatPrice(p.pricePaise)}</p>
                     </div>
-                    <Reason group={g} p={p} waiting={waiting.get(p.id) ?? 0} />
+                    <Reason group={g} p={p} waiting={waiting.get(p.id) ?? 0} threshold={threshold} />
                     <Link href={`/admin/products/${p.id}`} className={btn.secondary + " !px-3 !py-1.5"}>Fix</Link>
                   </li>
                 ))}

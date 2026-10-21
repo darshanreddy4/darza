@@ -9,6 +9,12 @@ import { useAuth } from "@/lib/auth";
 
 export function LoginPrompt({ open, onClose, next = "/checkout" }: { open: boolean; onClose: () => void; next?: string }) {
   const box = useRef<HTMLDivElement>(null);
+  // Whether the store lets shoppers check out with just a mobile number.
+  const [guestOn, setGuestOn] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    fetch(`${API_URL}/store/config`).then((r) => (r.ok ? r.json() : null)).then((c) => setGuestOn(c?.guest?.checkoutEnabled === true)).catch(() => undefined);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -41,6 +47,7 @@ export function LoginPrompt({ open, onClose, next = "/checkout" }: { open: boole
         <div className="mt-6 space-y-3">
           <Link href={`/login?next=${to}`} className="block rounded-xl bg-brand-500 px-6 py-3 font-semibold text-ink shadow-lg shadow-brand-500/25 hover:bg-brand-600">Log in</Link>
           <Link href={`/signup?next=${to}`} className="block rounded-xl border border-ink px-6 py-3 font-semibold hover:bg-ink hover:text-white">Create an account</Link>
+          {guestOn && <Link href="/checkout" onClick={onClose} className="block rounded-xl border border-line px-6 py-3 font-semibold hover:border-ink/40">Continue as a guest</Link>}
           <button type="button" onClick={onClose} className="w-full px-4 py-2 text-sm font-medium text-muted hover:text-ink">Not now</button>
         </div>
       </div>

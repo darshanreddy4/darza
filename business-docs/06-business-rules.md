@@ -9,7 +9,9 @@ Every rule the system applies, with its exact value. Values marked **setting** c
 | Product types | **Own** (sold and shipped by you, has stock) and **Affiliate** (partner link, no cart) |
 | Product status | **Draft** (hidden from the shop) or **Published** |
 | Stock is reduced | The moment an order is placed (cash on delivery or online), so the last unit can never be sold twice |
-| Stock comes back | When an order is cancelled or refunded, when an unpaid online order times out, and for each unit returned |
+| Stock comes back | When an order is cancelled or refunded, when an unpaid online order times out, and for each unit returned (it goes back to the main warehouse) |
+| Which warehouse a sale takes from | The main warehouse first, then the other warehouses, biggest stock first. Customers always see one total across all warehouses |
+| Stock history | Every change is recorded: sold, cancelled, returned, received, count corrected, moved, edited on the product page, imported |
 | Sold-out products | Cannot be added to a cart; shoppers can ask to be emailed when back |
 | Low-stock level | **Setting**, default 5 units. One email per product per dip, to the alert address; it re-arms when stock recovers |
 | Largest quantity of one item per order | 99 |
@@ -27,6 +29,9 @@ Every rule the system applies, with its exact value. Values marked **setting** c
 | Coupon and delivery | A coupon reduces the goods total; the delivery fee is added after. Free-delivery and gift amounts are measured on the cart value **before** the coupon, so a coupon never removes free delivery |
 | Heavy or bulky products | A product set to always charge delivery pays its own fee (or the store fee) once per order; its money counts towards the free-delivery amount of the regular items, but its own charge stays until the free-everything amount |
 | Free delivery on everything | **Setting** (optional): when the whole basket reaches this amount, every delivery charge is waived |
+| Pay on delivery | **Setting**: can be switched off, carry an extra fee, and be limited to orders up to an amount; bigger orders must be paid online |
+| Online-only products | **Per product**: a basket holding one cannot use pay on delivery |
+| Part payment | **Setting + per product**: a share (10 to 90 percent) is paid online when ordering and the rest on delivery; needs every product in the basket to allow it, and the highest share applies. Cancelling refunds the advance; a return refunds the advance online and the rest by UPI payout |
 | Delivery by area | **Setting**: PIN code starts with their own fee and optional free-over amount |
 | Rewards | **Setting**: free gifts and percentage-off rewards for baskets reaching an amount. A gift is recorded on the order when it is placed. A percentage off (best one reached, optional maximum) is taken before any coupon and kept on the order apart from the coupon discount, so coupon figures stay true |
 | GST | **Setting** on or off, with GSTIN, business name, address, state and a rate on delivery (default 18%). The regime in force when the order was placed is saved on that order, so later changes do not alter old invoices |
@@ -37,11 +42,12 @@ Every rule the system applies, with its exact value. Values marked **setting** c
 | Rule | Value |
 |---|---|
 | Statuses | Awaiting payment → Placed (cash) or Paid (online) → Shipped → Delivered; or Cancelled; or Refunded |
-| Who may place an order | Verified customers |
+| Who may place an order | Verified customers; guests (a verified mobile number, no password) when the store allows it |
+| Guest orders | Always paid online first: in full, or the delivery charge plus any pay-on-delivery fee (at least the store's minimum and any product part-payment share) with the rest collected in cash on delivery. Cash only is refused to guests, and the delivery-charge option follows the pay-on-delivery limit and online-only products. A guest who confirms an email becomes a regular customer |
 | Payment methods | Cash on delivery; online through Razorpay (only when keys are set) |
 | Unpaid online order | Holds stock for **30 minutes**, then is cancelled and stock released. A late payment on a cancelled order is refunded automatically |
 | Customer may cancel | While awaiting payment, placed or paid (not once shipped) |
-| Admin may cancel/refund | Any time before the order is already cancelled or refunded; staff cannot |
+| Admin may cancel/refund | Any time before the order is already cancelled or refunded; a team member needs the *Cancel and refund orders* permission |
 | Cancel/refund of a paid online order | Refunded in full (minus anything already returned) to the original payment method, automatically |
 | Coupon use | Cancelled and refunded orders give the coupon use back |
 
@@ -68,7 +74,7 @@ Every rule the system applies, with its exact value. Values marked **setting** c
 | Who can request | Verified customers, for delivered orders inside the window |
 | Parts of an order | Allowed. Several requests allowed until every unit has been returned |
 | Steps | Requested → Approved (or Declined with a reason) → Refunded |
-| Who decides | Staff or admin approve and decline; **only an admin refunds** |
+| Who decides | A team member with *Approve or decline returns* (or an admin) decides; **refunding needs the *Refund returns* permission** (admins always) |
 | Refund for part of an order | Price of the returned units minus their share of the coupon discount (shared out by value). Delivery is not refunded |
 | Refund when the last units come back | Everything still owed, including delivery |
 | Online order | Refunded to the original payment method automatically |

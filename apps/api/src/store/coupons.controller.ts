@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
-import { AuthGuard, Roles, type JwtPayload } from "../auth/auth.guard";
+import { AuthGuard, Permit, type JwtPayload } from "../auth/auth.guard";
 import { CouponDto } from "./coupon.dto";
 import { CouponsService } from "./coupons.service";
 
@@ -13,7 +13,7 @@ export class MyCouponsController {
 }
 
 @Controller("admin/coupons")
-@UseGuards(AuthGuard) @Roles("ADMIN")
+@UseGuards(AuthGuard) @Permit("coupons.manage")
 export class CouponsController {
   constructor(private coupons: CouponsService) {}
 

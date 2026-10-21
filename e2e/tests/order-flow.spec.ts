@@ -79,7 +79,11 @@ test.describe.serial("buying a DMG product", () => {
       const select = page.getByLabel(`Status for order ${orderId.slice(-8)}`);
       await expect(select).toBeVisible();
       await pick(select, "SHIPPED");
-      await expect(page.getByText("Order updated to shipped")).toBeVisible();
+      await page.getByLabel("Courier").fill("Delhivery");
+      await page.getByLabel("Tracking number").fill("DL123456789");
+      await page.getByLabel("Tracking link").fill("https://track.example/DL123456789");
+      await page.getByRole("button", { name: "Mark as shipped" }).click();
+      await expect(page.getByText("Order marked as shipped")).toBeVisible();
     });
 
     test("the stock went down by one", async ({ request }) => {
@@ -94,6 +98,9 @@ test.describe.serial("buying a DMG product", () => {
     test("sees the new status", async ({ page }) => {
       await page.goto("/orders");
       await expect(page.getByText("Shipped").first()).toBeVisible();
+      const tracking = page.getByTestId("tracking").filter({ hasText: "DL123456789" });
+      await expect(tracking).toContainText("Delhivery");
+      await expect(tracking.getByRole("link", { name: "Track shipment" })).toHaveAttribute("href", "https://track.example/DL123456789");
     });
   });
 });

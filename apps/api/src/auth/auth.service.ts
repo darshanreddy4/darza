@@ -15,12 +15,13 @@ import { normalisePhone } from "./phone";
 import { SiteService } from "../site/site.module";
 import { afterFailedLogin, lockMinutesLeft } from "./lockout";
 import { hashToken, newToken } from "./tokens";
+import { permissionsFor } from "./permissions";
 
 const HOUR = 3_600_000;
 const jwtSecret = () => process.env.JWT_SECRET ?? "";
 const INVALID_LINK = "This link is invalid or has expired. Please request a new one.";
 
-interface UserRow { id: string; email: string | null; phone: string | null; name: string; role: "CUSTOMER" | "STAFF" | "ADMIN"; emailVerifiedAt: Date | null; phoneVerifiedAt: Date | null; tokenVersion: number; passwordSet: boolean; googleId: string | null }
+interface UserRow { id: string; email: string | null; phone: string | null; name: string; role: "CUSTOMER" | "STAFF" | "ADMIN"; emailVerifiedAt: Date | null; phoneVerifiedAt: Date | null; tokenVersion: number; passwordSet: boolean; googleId: string | null; guestCheckout?: boolean }
 
 // "verified" is what orders and reviews need: a confirmed email address or a confirmed phone number.
 export const publicUser = (u: UserRow) => ({
@@ -28,6 +29,11 @@ export const publicUser = (u: UserRow) => ({
   emailVerified: !!u.emailVerifiedAt, verified: !!(u.emailVerifiedAt || u.phoneVerifiedAt),
   // What the account page offers: phone-only and Google accounts have no password until they set one.
   hasPassword: u.passwordSet && !!u.email, googleLinked: !!u.googleId,
+});
+
+// The user plus what their role lets them do, so the admin screens can show only what they may use.
+const accessOf = (u: UserRow & { staffRole?: { name: string; permissions: string[] } | null }) => ({
+  ...publicUser(u), permissions: permissionsFor(u), staffRoleName: u.staffRole?.name ?? null, guestCheckout: !!u.guestCheckout,
 });
 
 // The ways someone can prove who they are before something irreversible, such as deleting the account.
@@ -73,12 +79,19 @@ export class AuthService {
     return { google: process.env.GOOGLE_CLIENT_ID ? { clientId: process.env.GOOGLE_CLIENT_ID } : null, phone: this.sms.available };
   }
 
+  // Checking out with only a mobile number is a store setting.
+  private async assertGuestCheckout() {
+    const s = await this.prisma.storeSettings.findUnique({ where: { id: "default" }, select: { guestCheckoutEnabled: true } });
+    if (!s?.guestCheckoutEnabled) throw new BadRequestException("Checking out without an account isn't available. Please log in or sign up.");
+  }
+
   async sendOtp(dto: SendOtpDto) {
     const phone = normalisePhone(dto.phone);
     if (!phone) throw new BadRequestException("Enter a valid mobile number");
     if (!this.sms.available) throw new ServiceUnavailableException("Phone sign-in is not available right now. Please use email instead.");
 
     const existing = await this.prisma.user.findUnique({ where: { phone } });
+    if (dto.purpose === "guest") await this.assertGuestCheckout();
     if (dto.purpose === "signup" && existing) throw new ConflictException("This number already has an account. Please log in instead.");
     // Same answer whether or not the number has an account, so this cannot be used to look people up.
     if (dto.purpose === "login" && !existing) return { ok: true, resendInSeconds: OTP_RESEND_MS / 1000, ...(process.env.OTP_DEBUG_RESPONSE ? { devNote: "No account uses this number, so no code was sent. Use Create an account to sign up with it." } : {}) };
@@ -111,6 +124,20 @@ export class AuthService {
     await this.consumeOtp(phone, dto.purpose, dto.code);
 
     const existing = await this.prisma.user.findUnique({ where: { phone } });
+    if (dto.purpose === "guest") {
+      await this.assertGuestCheckout();
+      // A number that already has an account just signs in; team accounts use the normal sign-in page.
+      if (existing) {
+        if (existing.role !== "CUSTOMER" || existing.deletedAt) throw new BadRequestException("Please use the sign-in page for this number.");
+        return this.session(existing);
+      }
+      if (!dto.name?.trim()) throw new BadRequestException("Please tell us your name");
+      if (dto.termsAccepted !== true) throw new BadRequestException("Please accept the Terms & Conditions and Privacy Policy");
+      const guest = await this.prisma.user.create({
+        data: { phone, phoneVerifiedAt: new Date(), name: dto.name.trim(), passwordHash: await randomPasswordHash(), passwordSet: false, termsAcceptedAt: new Date(), guestCheckout: true },
+      });
+      return this.session(guest);
+    }
     if (dto.purpose === "login") {
       if (!existing) throw new BadRequestException("We could not find an account for this number. Please sign up first.");
       return this.session(existing);
@@ -163,9 +190,9 @@ export class AuthService {
   }
 
   async me(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { staffRole: { select: { name: true, permissions: true } } } });
     if (!user) throw new UnauthorizedException();
-    return { user: publicUser(user) };
+    return { user: accessOf(user) };
   }
 
   async resendVerification(userId: string) {
@@ -176,12 +203,12 @@ export class AuthService {
   async verifyEmail(token: string) {
     const { userId, type, data } = await this.consume(token, ["EMAIL_VERIFY", "EMAIL_ADD"]);
     if (type === "EMAIL_VERIFY") {
-      await this.prisma.user.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } });
+      await this.prisma.user.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date(), guestCheckout: false } });
       return;
     }
     // The address is only attached once its owner has clicked the link, so it is verified from the start.
     try {
-      const { count } = await this.prisma.user.updateMany({ where: { id: userId, email: null, deletedAt: null }, data: { email: data, emailVerifiedAt: new Date() } });
+      const { count } = await this.prisma.user.updateMany({ where: { id: userId, email: null, deletedAt: null }, data: { email: data, emailVerifiedAt: new Date(), guestCheckout: false } });
       if (count !== 1) throw new BadRequestException("This account already has an email address.");
     } catch (e) {
       if ((e as { code?: string }).code === "P2002") throw new ConflictException("That email address now belongs to another account.");
@@ -261,7 +288,7 @@ export class AuthService {
     if (!user.email) throw new BadRequestException("Add an email address first; you sign in with it and your password.");
     const problem = passwordProblem(password, { email: user.email, name: user.name });
     if (problem) throw new BadRequestException(problem);
-    const updated = await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(password, 12), passwordSet: true, tokenVersion: { increment: 1 } } });
+    const updated = await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(password, 12), passwordSet: true, guestCheckout: false, tokenVersion: { increment: 1 } } });
     return this.session(updated);
   }
 
@@ -309,7 +336,7 @@ export class AuthService {
     const { userId } = await this.consume(token, ["PASSWORD_RESET"]);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: await bcrypt.hash(password, 12), passwordSet: true, failedLogins: 0, lockedUntil: null, tokenVersion: { increment: 1 } },
+      data: { passwordHash: await bcrypt.hash(password, 12), passwordSet: true, failedLogins: 0, lockedUntil: null, guestCheckout: false, tokenVersion: { increment: 1 } },
     });
     // Receiving the reset email proves the address is theirs.
     await this.prisma.user.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } });
@@ -355,6 +382,7 @@ export class AuthService {
 
   private async session(user: UserRow) {
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, tv: user.tokenVersion });
-    return { token, user: publicUser(user) };
+    const staffRole = user.role === "STAFF" ? (await this.prisma.user.findUnique({ where: { id: user.id }, select: { staffRole: { select: { name: true, permissions: true } } } }))?.staffRole ?? null : null;
+    return { token, user: accessOf({ ...user, staffRole }) };
   }
 }

@@ -6,9 +6,15 @@ import { PrismaService } from "../prisma.service";
 import { AuditService } from "../audit/audit-log.service";
 import { describeAction } from "../audit/audit-describe";
 import { isTrustedOrigin, readSessionCookie } from "./session-cookie";
+import { permissionsFor } from "./permissions";
 
 export const ROLES_KEY = "roles";
+// Admin-only routes: managing the team, its roles and sessions.
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
+
+export const PERMIT_KEY = "permit";
+// Admin-area routes: the user needs at least one of these permissions (admins have them all).
+export const Permit = (...permissions: string[]) => SetMetadata(PERMIT_KEY, permissions);
 
 export const ANONYMOUS_KEY = "allowAnonymous";
 // For routes that answer differently for guests; they get through with req.user unset instead of a 401. A bad session is still refused.
@@ -24,6 +30,8 @@ export interface JwtPayload {
   role: Role;
   // Must match User.tokenVersion, so a password change signs out older sessions.
   tv: number;
+  // Filled in by the guard from the user's team role on every request; never put in the token.
+  permissions?: string[];
 }
 
 @Injectable()
@@ -57,21 +65,25 @@ export class AuthGuard implements CanActivate {
     }
 
     // Role and session validity come from the database so demotions and password changes apply immediately.
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { role: true, tokenVersion: true, emailVerifiedAt: true, phoneVerifiedAt: true } });
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { role: true, tokenVersion: true, emailVerifiedAt: true, phoneVerifiedAt: true, staffRole: { select: { permissions: true } } } });
     if (!user || user.tokenVersion !== payload.tv) throw new UnauthorizedException();
-    req.user = { sub: payload.sub, role: user.role, tv: user.tokenVersion } satisfies JwtPayload;
+    req.user = { sub: payload.sub, role: user.role, tv: user.tokenVersion, permissions: permissionsFor(user) } satisfies JwtPayload;
 
     if (this.reflector.getAllAndOverride<boolean | undefined>(VERIFIED_KEY, [ctx.getHandler(), ctx.getClass()]) && !(user.emailVerifiedAt || user.phoneVerifiedAt)) {
       throw new ForbiddenException({ statusCode: 403, code: "EMAIL_NOT_VERIFIED", message: "Please verify your email address first. We sent you a link when you signed up." });
     }
 
     const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, [ctx.getHandler(), ctx.getClass()]);
-    if (roles?.length && !roles.includes(user.role)) {
-      // The audit interceptor never sees a request the guard turns away, so an attempt to change something is noted here.
-      const entry = describeAction({ method: req.method, routePath: req.route?.path ?? "", params: req.params, body: req.body, query: req.query });
-      if (entry) void this.audit.record(req.user, { ...entry, action: `${entry.action}.blocked`, summary: `Blocked: ${entry.summary.charAt(0).toLowerCase()}${entry.summary.slice(1)}` });
-      throw new ForbiddenException();
-    }
+    if (roles?.length && !roles.includes(user.role)) this.deny(req);
+    const needs = this.reflector.getAllAndOverride<string[] | undefined>(PERMIT_KEY, [ctx.getHandler(), ctx.getClass()]);
+    if (needs?.length && !needs.some((p) => req.user.permissions.includes(p))) this.deny(req);
     return true;
+  }
+
+  private deny(req: { method: string; route?: { path?: string }; params: Record<string, string>; body: Record<string, unknown>; query: Record<string, unknown>; user: JwtPayload }): never {
+    // The audit interceptor never sees a request the guard turns away, so an attempt to change something is noted here.
+    const entry = describeAction({ method: req.method, routePath: req.route?.path ?? "", params: req.params, body: req.body, query: req.query });
+    if (entry) void this.audit.record(req.user, { ...entry, action: `${entry.action}.blocked`, summary: `Blocked: ${entry.summary.charAt(0).toLowerCase()}${entry.summary.slice(1)}` });
+    throw new ForbiddenException();
   }
 }

@@ -13,6 +13,8 @@ export interface OptionInput {
   stock: number;
   costPaise?: number | null;
   imageUrl?: string | null;
+  sku?: string | null;
+  weightGrams?: number | null;
 }
 
 export interface ShapedOption {
@@ -24,6 +26,8 @@ export interface ShapedOption {
   stock: number;
   costPaise: number | null;
   imageUrl: string | null;
+  sku: string | null;
+  weightGrams: number | null;
 }
 
 export const cleanLabel = (label: string) => label.trim().replace(/\s+/g, " ");
@@ -46,6 +50,7 @@ export function shapeOptions(names: string[] | undefined, options: OptionInput[]
   if (new Set(kinds.map((k) => k.toLowerCase())).size !== kinds.length) errors.push("Each kind of option needs a different name");
 
   const seen = new Set<string>();
+  const skus = new Set<string>();
   let incomplete = false;
   const shaped = options.map((o, n) => {
     const values = valuesOf[n];
@@ -56,7 +61,12 @@ export function shapeOptions(names: string[] | undefined, options: OptionInput[]
       seen.add(label.toLowerCase());
     }
     if (o.mrpPaise != null && o.mrpPaise < o.pricePaise) errors.push(`The MRP of "${label}" cannot be lower than its price`);
-    return { id: o.id, label, values, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise ?? null, stock: o.stock, costPaise: o.costPaise ?? null, imageUrl: o.imageUrl || null };
+    const sku = o.sku?.trim() || null;
+    if (sku) {
+      if (skus.has(sku.toLowerCase())) errors.push(`The SKU "${sku}" is used on two options`);
+      skus.add(sku.toLowerCase());
+    }
+    return { id: o.id, label, values, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise ?? null, stock: o.stock, costPaise: o.costPaise ?? null, imageUrl: o.imageUrl || null, sku, weightGrams: o.weightGrams ?? null };
   });
   if (incomplete && kinds.length) errors.push(`Every option needs a ${kinds.join(" and a ")}`);
   return { names: kinds, options: shaped, errors };

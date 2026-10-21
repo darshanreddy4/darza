@@ -25,14 +25,13 @@ test.describe.serial("staff role and audit log", () => {
 
   test.afterAll(async () => { await staff.close(); });
 
-  test("an admin makes someone staff from the users page", async ({ page }) => {
-    await page.goto("/admin/users");
-    await page.getByLabel("Search users").fill(STAFF_NAME);
-    const select = page.getByLabel(/Role for /);
-    await expect(select).toHaveCount(1);
-    page.once("dialog", (d) => d.accept());
-    await pick(select, "STAFF");
-    await expect(page.getByText(/is now staff/)).toBeVisible();
+  // Staff made before team roles existed (no role chosen) keep the original staff access; the Users page only offers roles, so this goes through the API.
+  test("an admin makes someone staff without a team role", async ({ request }) => {
+    const found = await request.get(`${API}/admin/users?q=${encodeURIComponent(STAFF_NAME)}`, { headers: asBrowser });
+    const user = ((await found.json()) as { items: { id: string; name: string }[] }).items.find((u) => u.name === STAFF_NAME)!;
+    expect(user).toBeTruthy();
+    const res = await request.patch(`${API}/admin/users/${user.id}/role`, { data: { role: "STAFF" }, headers: asBrowser });
+    expect(res.status()).toBe(200);
   });
 
   test("staff can work orders, returns and questions, and never see costs", async () => {
@@ -66,26 +65,29 @@ test.describe.serial("staff role and audit log", () => {
     for (const status of ["CANCELLED", "REFUNDED"]) {
       const res = await staff.request.patch(`${API}/admin/orders/${orderId}/status`, { data: { status }, headers: asBrowser });
       expect(res.status()).toBe(403);
-      expect(JSON.stringify(await res.json())).toContain("Only an admin");
+      expect(JSON.stringify(await res.json())).toContain("cannot do this");
     }
   });
 
   test("the staff console shows only what staff can use", async () => {
     const page = await staff.newPage();
     await page.goto("/admin");
-    await expect(page).toHaveURL(/\/admin\/orders/);
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByRole("heading", { name: "Welcome, Sam" })).toBeVisible();
 
     const nav = page.getByRole("navigation", { name: "Admin" });
     for (const name of ["Orders", "Returns", "Questions", "Products"]) await expect(nav.getByRole("link", { name })).toBeVisible();
     for (const name of ["Users", "Settings", "Audit log", "Coupons", "Analytics"]) await expect(nav.getByRole("link", { name })).toHaveCount(0);
     await expect(page.getByText("Staff console")).toBeVisible();
 
+    await page.getByRole("link", { name: "Orders" }).first().click();
+    await expect(page).toHaveURL(/\/admin\/orders/);
     await page.getByRole("button", { name: ref() }).click();
     const status = page.getByLabel(`Status for order ${orderId.slice(-8)}`);
     await expectOptions(status, { present: ["Delivered"], absent: ["Cancelled", "Refunded"] });
 
     await page.goto("/admin/settings");
-    await expect(page).toHaveURL(/\/admin\/orders/);
+    await expect(page).toHaveURL(/\/admin$/);
 
     await page.goto("/admin/products");
     await expect(page.getByRole("heading", { name: "Products" })).toBeVisible();

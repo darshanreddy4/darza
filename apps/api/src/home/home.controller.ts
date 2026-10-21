@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Put, UseGuards } from "@nestjs/common";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { HomeService } from "./home.service";
 
 @Controller()
@@ -12,20 +12,20 @@ export class HomeController {
   }
 
   @Get("admin/home-layout")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   layout() {
     return this.home.layout();
   }
 
   // Replaces the whole layout: the admin edits it in the browser and saves it in one go.
   @Put("admin/home-layout")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   save(@Body() body: { widgets?: unknown }) {
     return this.home.save(body?.widgets);
   }
 
   @Delete("admin/home-layout")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   reset() {
     return this.home.reset();
   }

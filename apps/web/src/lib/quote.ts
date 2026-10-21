@@ -11,6 +11,12 @@ export interface Quote {
   coupon: { code: string; description: string | null } | null; couponError: string | null; unavailable: string[];
   // Codes this shopper can use or is close to unlocking.
   offers: Offer[];
+  // Whether pay on delivery may be used for this basket, and its extra fee; codFeePaise is already in the total when the quote was asked for COD.
+  codFeePaise: number; cod: { allowed: boolean; feePaise: number; reason: string | null };
+  // Part payment: a share paid online now and the rest on delivery, when the store and every product in the basket allow it.
+  advance: { available: boolean; reason: string | null; percent: number; payNowPaise: number; balancePaise: number };
+  // A guest (checking out with only a verified mobile number) pays online, or the delivery charge online and the rest on delivery.
+  guest: { isGuest: boolean; deliveryAdvance: { allowed: boolean; reason: string | null; advancePaise: number; balancePaise: number; totalPaise: number } | null };
   // The multi-buy saving is already inside subtotalPaise; lines say what each product costs after it.
   multiBuySavedPaise: number;
   lines: { productId: string; optionId: string | null; unitPaise: number; savedPaise: number; returnDays: number; buyMoreFor: { qty: number; percent: number } | null }[];
@@ -52,22 +58,23 @@ export function useCouponCode(): [string, (code: string) => void] {
 
 // Asks the server to price the basket so delivery fees, coupons and totals always match what will be charged.
 // The PIN code (once it is known) lets area delivery fees count.
-export function useQuote(lines: CartLine[], couponCode: string, pincode?: string) {
+export function useQuote(lines: CartLine[], couponCode: string, pincode?: string, method?: "COD" | "ONLINE" | "ADVANCE" | "DELIVERY_ADVANCE", userId?: string) {
   const items = useMemo(() => lines.map((l) => ({ productId: l.productId, optionId: l.optionId, quantity: l.quantity })), [lines]);
-  const key = JSON.stringify({ items, couponCode, pincode });
+  // The answer depends on who is asking (guests are priced differently), so signing in asks again.
+  const key = JSON.stringify({ items, couponCode, pincode, method, userId });
   const [state, setState] = useState<{ key: string; quote: Quote | null }>({ key: "", quote: null });
 
   useEffect(() => {
     if (items.length === 0) return;
     let stale = false;
     const t = setTimeout(() => {
-      fetch(`${API_URL}/checkout/quote`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ items, couponCode: couponCode || undefined, pincode: pincode || undefined }) })
+      fetch(`${API_URL}/checkout/quote`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ items, couponCode: couponCode || undefined, pincode: pincode || undefined, paymentMethod: method }) })
         .then((r) => (r.ok ? (r.json() as Promise<Quote>) : null))
         .then((quote) => { if (!stale) setState({ key, quote }); })
         .catch(() => { if (!stale) setState({ key, quote: null }); });
     }, 250);
     return () => { stale = true; clearTimeout(t); };
-  }, [key, items, couponCode, pincode]);
+  }, [key, items, couponCode, pincode, method]);
 
   // The previous answer stays on screen while a new one loads, so totals don't flicker.
   return { quote: state.quote, loading: state.key !== key };

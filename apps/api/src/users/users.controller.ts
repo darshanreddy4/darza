@@ -1,7 +1,7 @@
 import { Body, ConflictException, Controller, DefaultValuePipe, Get, NotFoundException, Param, ParseIntPipe, Patch, Post, Query, Req, Res, UseGuards, BadRequestException, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { Response } from "express";
-import { AuthGuard, Roles, type JwtPayload } from "../auth/auth.guard";
+import { AuthGuard, Permit, Roles, type JwtPayload } from "../auth/auth.guard";
 import { PrismaService } from "../prisma.service";
 import { toCsv } from "./csv";
 import { validateRoleChange } from "./role-rules";
@@ -22,9 +22,10 @@ function userFilter(q?: string, role?: string, verified?: string): Prisma.UserWh
   };
 }
 
+// Admins see every account; a team member who may view customers sees customers only, never colleagues.
 @Controller("admin/users")
 @UseGuards(AuthGuard)
-@Roles("ADMIN")
+@Permit("customers.view")
 export class UsersController {
   private readonly logger = new Logger("Users");
 
@@ -32,14 +33,15 @@ export class UsersController {
 
   @Get()
   async list(
+    @Req() req: { user: JwtPayload },
     @Query("q") q?: string,
     @Query("role") role?: string,
     @Query("verified") verified?: string,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page = 1,
   ) {
-    const where = userFilter(q, role, verified);
+    const where = userFilter(q, req.user.role === "ADMIN" ? role : "CUSTOMER", verified);
     const safePage = Math.max(1, page);
-    const [total, admins, users] = await this.prisma.$transaction([
+    const [total, admins, users, roles] = await this.prisma.$transaction([
       this.prisma.user.count({ where }),
       this.prisma.user.count({ where: { role: "ADMIN" } }),
       this.prisma.user.findMany({
@@ -47,8 +49,10 @@ export class UsersController {
         orderBy: { createdAt: "desc" },
         skip: (safePage - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        select: { id: true, email: true, phone: true, googleId: true, name: true, role: true, emailVerifiedAt: true, phoneVerifiedAt: true, createdAt: true },
+        select: { id: true, email: true, phone: true, googleId: true, name: true, role: true, staffRole: { select: { id: true, name: true } }, emailVerifiedAt: true, phoneVerifiedAt: true, createdAt: true },
       }),
+      // The roles an admin can give to a team member.
+      this.prisma.staffRole.findMany({ where: req.user.role === "ADMIN" ? {} : { id: "" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     ]);
 
     // Orders that were actually paid for or are on their way; cancelled and refunded ones do not count as spend.
@@ -66,6 +70,7 @@ export class UsersController {
       page: safePage,
       pageSize: PAGE_SIZE,
       admins,
+      roles,
       items: users.map(({ emailVerifiedAt, phoneVerifiedAt, googleId, phone: loginPhone, ...u }) => ({
         ...u,
         emailVerified: emailVerifiedAt !== null || phoneVerifiedAt !== null,
@@ -81,14 +86,16 @@ export class UsersController {
 
   // Everyone matching the current filters as a spreadsheet file.
   @Get("export")
+  @Permit("customers.export")
   async exportCsv(
+    @Req() req: { user: JwtPayload },
     @Res({ passthrough: true }) res: Response,
     @Query("q") q?: string,
     @Query("role") role?: string,
     @Query("verified") verified?: string,
   ) {
     const users = await this.prisma.user.findMany({
-      where: userFilter(q, role, verified),
+      where: userFilter(q, req.user.role === "ADMIN" ? role : "CUSTOMER", verified),
       orderBy: { createdAt: "desc" },
       take: EXPORT_LIMIT,
       select: { id: true, email: true, phone: true, googleId: true, name: true, role: true, emailVerifiedAt: true, phoneVerifiedAt: true, createdAt: true },
@@ -118,7 +125,7 @@ export class UsersController {
 
   // Who the user is and everything they have bought from us.
   @Get(":id")
-  async detail(@Param("id") id: string) {
+  async detail(@Req() req: { user: JwtPayload }, @Param("id") id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -133,7 +140,7 @@ export class UsersController {
         },
       },
     });
-    if (!user) throw new NotFoundException();
+    if (!user || (user.role !== "CUSTOMER" && req.user.role !== "ADMIN")) throw new NotFoundException();
 
     const statsOrders = user.orders.map((o) => ({
       id: o.id, status: o.status, totalPaise: o.totalPaise, refundedPaise: o.refundedPaise,
@@ -167,7 +174,9 @@ export class UsersController {
     return new Map(ids.map((id) => [id, pickContact(addresses.filter((a) => a.userId === id), latestBy.get(id))]));
   }
 
+  // Who is on the team and what they may do is for admins only, so nobody can raise their own access.
   @Patch(":id/role")
+  @Roles("ADMIN")
   async setRole(@Req() req: { user: JwtPayload }, @Param("id") id: string, @Body() dto: SetRoleDto) {
     try {
       const updated = await this.prisma.$transaction(
@@ -182,12 +191,15 @@ export class UsersController {
             adminCount: await tx.user.count({ where: { role: "ADMIN" } }),
           });
           if (problem) throw new BadRequestException(problem);
-          return tx.user.update({ where: { id }, data: { role: dto.role }, select: { id: true, email: true, role: true } });
+          if (dto.role === "STAFF" && dto.staffRoleId && !(await tx.staffRole.count({ where: { id: dto.staffRoleId } }))) throw new BadRequestException("That team role does not exist.");
+          // Only team members have a team role; a role left out keeps the one they have.
+          const staffRoleId = dto.role === "STAFF" ? dto.staffRoleId : null;
+          return tx.user.update({ where: { id }, data: { role: dto.role, ...(staffRoleId !== undefined ? { staffRoleId } : {}) }, select: { id: true, email: true, role: true, staffRole: { select: { id: true, name: true } } } });
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
-      this.logger.log(`Admin ${req.user.sub} set role of ${updated.email} to ${updated.role}`);
-      return { id: updated.id, role: updated.role };
+      this.logger.log(`Admin ${req.user.sub} set role of ${updated.email} to ${updated.role}${updated.staffRole ? ` (${updated.staffRole.name})` : ""}`);
+      return { id: updated.id, role: updated.role, staffRole: updated.staffRole };
     } catch (e) {
       // Two admins changing roles at the same moment: the database rejects one so the last admin can never be removed.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") throw new ConflictException("Another change was happening at the same time. Please try again.");
@@ -197,6 +209,7 @@ export class UsersController {
 
   // Ends every login session of a user (a lost phone, a shared computer); they sign in again with their password.
   @Post(":id/sign-out")
+  @Roles("ADMIN")
   async signOut(@Req() req: { user: JwtPayload }, @Param("id") id: string) {
     if (id === req.user.sub) throw new BadRequestException("Use Log out for your own account.");
     const res = await this.prisma.user.updateMany({ where: { id }, data: { tokenVersion: { increment: 1 } } });

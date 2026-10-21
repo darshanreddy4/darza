@@ -19,6 +19,7 @@ import { RewardsBar } from "@/components/RewardsBar";
 import { SummaryTotals } from "@/components/SummaryTotals";
 import { VerifyRequired } from "@/components/VerifyRequired";
 import { Select } from "@/components/Select";
+import { PhoneFlow } from "@/components/auth/PhoneFlow";
 
 const field = "w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15";
 
@@ -33,12 +34,24 @@ export default function CheckoutPage() {
   const [onlineAvailable, setOnlineAvailable] = useState(false);
   const [whatsappOffered, setWhatsappOffered] = useState(false);
   const [whatsapp, setWhatsapp] = useState(false);
-  const [method, setMethod] = useState<"ONLINE" | "COD">("COD");
+  const [chosen, setMethod] = useState<"ONLINE" | "COD" | "ADVANCE" | "DELIVERY_ADVANCE">("COD");
+  // Whether the store lets shoppers check out with just a verified mobile number; unknown until the store details arrive.
+  const [guestOn, setGuestOn] = useState<boolean | null>(null);
   const [saved, setSaved] = useState<SavedAddress[]>([]);
   // The id of a saved address, or "new" to type one in.
   const [choice, setChoice] = useState("new");
   const [typedPin, setTypedPin] = useState("");
-  const { quote } = useQuote(lines, coupon, choice === "new" ? typedPin : saved.find((a) => a.id === choice)?.pincode);
+  const { quote } = useQuote(lines, coupon, choice === "new" ? typedPin : saved.find((a) => a.id === choice)?.pincode, chosen, user?.id);
+  // Pay on delivery can be switched off or capped by the store; the shopper is moved to online payment when it is refused.
+  const codBlocked = !!quote && !quote.cod.allowed;
+  const advanceBlocked = !!quote && !quote.advance.available;
+  // A guest can also pay the delivery charge now and the rest on delivery.
+  const isGuest = !!quote?.guest.isGuest;
+  const guestOffer = quote?.guest.deliveryAdvance ?? null;
+  const guestBlocked = !guestOffer?.allowed;
+  // When the shopper's choice is refused, they land on part payment if the basket offers it, else on paying everything online.
+  const fallback = quote?.advance.available ? "ADVANCE" : "ONLINE";
+  const method = chosen === "COD" && codBlocked && onlineAvailable ? fallback : chosen === "ADVANCE" && advanceBlocked ? "ONLINE" : chosen === "DELIVERY_ADVANCE" && (!isGuest || guestBlocked) ? "ONLINE" : chosen;
 
   useEffect(() => {
     let stale = false;
@@ -48,8 +61,8 @@ export default function CheckoutPage() {
       .catch(() => {});
     fetch(`${API_URL}/store/config`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((c: { whatsappUpdates?: boolean } | null) => { if (!stale && c?.whatsappUpdates) setWhatsappOffered(true); })
-      .catch(() => {});
+      .then((c: { whatsappUpdates?: boolean; guest?: { checkoutEnabled?: boolean } } | null) => { if (!stale) { if (c?.whatsappUpdates) setWhatsappOffered(true); setGuestOn(c?.guest?.checkoutEnabled === true); } })
+      .catch(() => { if (!stale) setGuestOn(false); });
     return () => { stale = true; };
   }, []);
 
@@ -65,10 +78,11 @@ export default function CheckoutPage() {
   }, [userId]);
 
   useEffect(() => {
-    if (ready && !user) router.replace("/login?next=/checkout");
-  }, [ready, user, router]);
+    if (ready && !user && guestOn === false) router.replace("/login?next=/checkout");
+  }, [ready, user, guestOn, router]);
 
-  if (!ready || !user) return <p className="text-sm text-muted">Loading…</p>;
+  if (!ready || (!user && guestOn === null)) return <p className="text-sm text-muted">Loading…</p>;
+  if (!user) return lines.length === 0 ? <p className="text-sm text-muted">Your cart is empty.</p> : <GuestGate />;
   if (lines.length === 0) {
     return (
       <div className="mx-auto max-w-md text-center">
@@ -103,7 +117,7 @@ export default function CheckoutPage() {
         fetch(`${API_URL}/addresses`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(shipping) }).catch(() => {});
       }
 
-      if (method === "ONLINE" && body.payment) {
+      if (method !== "COD" && body.payment) {
         const result = await payForOrder(body.payment as PaymentParams, { name: user!.name, email: user!.email, phone: user!.phone }, brand);
         router.replace(result.status === "paid" ? "/orders?placed=paid" : result.status === "failed" ? `/orders?placed=unpaid&reason=${encodeURIComponent(result.message)}` : "/orders?placed=unpaid");
         return;
@@ -161,8 +175,21 @@ export default function CheckoutPage() {
             {onlineAvailable && (
               <PaymentOption selected={method === "ONLINE"} onSelect={() => setMethod("ONLINE")} title="Pay online" text="UPI, cards, netbanking and wallets via Razorpay. Your order is confirmed as soon as payment succeeds." />
             )}
-            <PaymentOption selected={method === "COD"} onSelect={() => setMethod("COD")} title="Pay on delivery" text="Pay in cash or by UPI when your order arrives." />
+            {onlineAvailable && quote?.advance.available && (
+              <PaymentOption selected={method === "ADVANCE"} onSelect={() => setMethod("ADVANCE")} title={`Pay ${quote.advance.percent}% now, the rest on delivery`}
+                text={`Pay ${formatPrice(quote.advance.payNowPaise)} online now. The remaining ${formatPrice(quote.advance.balancePaise)} is paid in cash or by UPI when your order arrives.`} />
+            )}
+            {onlineAvailable && isGuest && guestOffer?.allowed && (
+              <PaymentOption selected={method === "DELIVERY_ADVANCE"} onSelect={() => setMethod("DELIVERY_ADVANCE")} title={`Pay ${formatPrice(guestOffer.advancePaise)} now, the rest in cash on delivery`}
+                text={`The ${formatPrice(guestOffer.advancePaise)} covers your delivery charge${quote && quote.cod.feePaise > 0 ? " and the pay-on-delivery fee" : ""}. The remaining ${formatPrice(guestOffer.balancePaise)} is paid in cash or by UPI when your order arrives.`} />
+            )}
+            {!isGuest && (
+            <PaymentOption selected={method === "COD"} disabled={codBlocked} onSelect={() => setMethod("COD")} title="Pay on delivery"
+              text={codBlocked ? quote!.cod.reason ?? "Pay on delivery isn't available." : `Pay in cash or by UPI when your order arrives.${quote && quote.cod.feePaise > 0 ? ` A fee of ${formatPrice(quote.cod.feePaise)} is added.` : ""}`} />
+            )}
           </div>
+          {isGuest && <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">You are checking out as a guest with {user.phone}. {guestOffer && !guestOffer.allowed && guestOffer.reason ? guestOffer.reason : "Pay in full online, or pay just the delivery charge now and the rest when your order arrives."}</p>}
+          {codBlocked && !onlineAvailable && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{quote!.cod.reason} Online payment is not available right now, so this order cannot be placed.</p>}
           {whatsappOffered && (
             <label className="flex items-start gap-3 rounded-xl border border-line bg-white p-4 text-sm">
               <input type="checkbox" checked={whatsapp} onChange={(e) => setWhatsapp(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-600" />
@@ -178,23 +205,48 @@ export default function CheckoutPage() {
           </ul>
           <CouponBox code={coupon} setCode={setCoupon} quote={quote} />
           <OfferList quote={quote} setCode={setCoupon} />
-          <SummaryTotals quote={quote} itemCount={count} fallbackPaise={totalPaise} />
+          <SummaryTotals quote={quote} itemCount={count} fallbackPaise={totalPaise} partPayment={method === "ADVANCE"} split={method === "DELIVERY_ADVANCE" && guestOffer?.allowed ? { nowLabel: "Pay now (delivery charge)", nowPaise: guestOffer.advancePaise, laterPaise: guestOffer.balancePaise } : undefined} />
           {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          <button disabled={busy || !user.verified || !!quote?.couponError} className="w-full rounded-xl bg-brand-500 px-6 py-3.5 font-semibold text-ink shadow-lg shadow-brand-500/25 hover:bg-brand-600 disabled:opacity-60">{busy ? (method === "ONLINE" ? "Opening payment…" : "Placing order…") : method === "ONLINE" ? `Pay ${formatPrice(total)}` : "Place order"}</button>
+          <button disabled={busy || !user.verified || !!quote?.couponError || (method === "COD" && codBlocked)} className="w-full rounded-xl bg-brand-500 px-6 py-3.5 font-semibold text-ink shadow-lg shadow-brand-500/25 hover:bg-brand-600 disabled:opacity-60">{busy ? (method !== "COD" ? "Opening payment…" : "Placing order…") : method === "ADVANCE" && quote?.advance.available ? `Pay ${formatPrice(quote.advance.payNowPaise)} now` : method === "DELIVERY_ADVANCE" && guestOffer?.allowed ? `Pay ${formatPrice(guestOffer.advancePaise)} now` : method === "ONLINE" ? `Pay ${formatPrice(total)}` : "Place order"}</button>
         </aside>
       </form>
     </div>
   );
 }
 
-function PaymentOption({ selected, onSelect, title, text }: { selected: boolean; onSelect: () => void; title: string; text: string }) {
+// Checking out without an account: a name, the terms and a code sent to the mobile number. No password.
+function GuestGate() {
+  const [name, setName] = useState("");
+  const [terms, setTerms] = useState(false);
+  return (
+    <div className="mx-auto max-w-md space-y-6">
+      <h1 className="text-3xl font-bold">Checkout</h1>
+      <section className="space-y-4 rounded-3xl border border-line bg-white p-7 shadow-card" aria-label="Continue as a guest">
+        <div>
+          <h2 className="text-lg font-bold">Continue with your mobile number</h2>
+          <p className="mt-1 text-sm text-muted">No account or password needed. We text you a code to confirm your number, then you choose how to pay: in full online, or just the delivery charge now and the rest on delivery.</p>
+        </div>
+        <label className="block text-sm font-medium">Your name
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} autoComplete="name" placeholder="Full name" className={`${field} mt-1.5`} />
+        </label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" /> <span>I agree to the <Link href="/terms" className="text-brand-700 underline">Terms &amp; Conditions</Link> and <Link href="/privacy" className="text-brand-700 underline">Privacy Policy</Link>.</span></label>
+        <PhoneFlow purpose="guest" extra={{ name, termsAccepted: terms }} check={() => (name.trim() ? (terms ? null : "Please accept the Terms & Conditions and Privacy Policy") : "Please tell us your name")} afterLogin={() => "/checkout"} />
+      </section>
+      <p className="text-center text-sm text-muted">Already have an account? <Link href="/login?next=/checkout" className="font-semibold text-brand-700 hover:underline">Log in</Link></p>
+    </div>
+  );
+}
+
+function PaymentOption({ selected, onSelect, title, text, disabled = false }: { selected: boolean; onSelect: () => void; title: string; text: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={selected}
+      aria-disabled={disabled}
+      disabled={disabled}
       onClick={onSelect}
-      className={`flex items-start gap-3 rounded-xl border-2 p-4 text-left transition ${selected ? "border-brand-500 bg-brand-50" : "border-line hover:border-ink/30"}`}
+      className={`flex items-start gap-3 rounded-xl border-2 p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${selected ? "border-brand-500 bg-brand-50" : "border-line hover:border-ink/30"}`}
     >
       <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 ${selected ? "border-brand-600" : "border-line"}`}>
         {selected && <span className="h-2.5 w-2.5 rounded-full bg-brand-600" />}

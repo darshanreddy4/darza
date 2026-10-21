@@ -25,7 +25,9 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] Delete icon beside each cart item
 - [x] Coupons the shopper can use are listed in the cart and checkout, and shown on the progress bar at the amount that unlocks them; the admin chooses whether a code is shown
 - [x] Saved addresses with a default; state list, pincode and phone checks
-- [x] Pay on delivery
+- [x] Pay on delivery, with an optional fee and a largest order size (or switched off)
+- [x] Products that must be paid for online only (no pay on delivery), chosen per product
+- [x] Part payment: a share online when ordering (for example 30 to 40 percent) and the rest on delivery, switched on in Settings and chosen per product
 - [x] Pay online by card, UPI or net banking (Razorpay)
 - [x] "Pay now" to finish an unpaid online order within 30 minutes
 - [x] Optional WhatsApp updates tick box
@@ -53,10 +55,20 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] About, Contact, Terms, Privacy, Refund policy, Shipping policy, Affiliate disclosure
 - [x] One-click unsubscribe from cart reminders
 
-## For staff
+## For the team
 
-- [x] Smaller staff console: Orders, Returns, Questions, Products (read-only), Attention ([staff guide](05-staff-guide.md))
-- [x] Move orders to Paid, Shipped, Delivered
+- [x] **Guest checkout** (switch in Settings): shoppers order with just a name and a verified mobile number; they pay online in full, or pay the delivery charge now and the rest on delivery; guest orders are badged for the team and carry the cash to collect on the label
+- [x] **Order progress bar** on My orders (placed, preparing, shipped with date and courier, delivered), which an admin can switch off in Settings
+- [x] **Weight and per-option SKU** (switch in Settings): every option can have its own SKU and weight, products a weight; SKUs are unique across products and options; packing slips and labels print the option's SKU and the parcel weight as bought
+- [x] **Option-level low stock alerts** (switch in Settings): one option running low is flagged on the Attention list and in the low stock email even when the product total is fine
+- [x] **Warehouses and stock history:** one main warehouse from the start, more can be added; receive stock into a warehouse, correct a count (with a reason) and move stock between warehouses; every change to stock (sales, cancellations, returns, deliveries, corrections, moves, product edits, CSV imports) is written down with who, when, which order and the units left ([admin guide](04-admin-guide.md))
+- [x] **Role-based access:** an admin makes team roles (customer care, finance, product reviewer, catalogue manager, marketing, warehouse and more, from ready-made templates) with 22 permissions, and gives each team member a role; menus, screens and the server all follow the role ([roles](03-roles-and-permissions.md))
+- [x] Team & roles screen (admin only): create, edit and delete roles, see who holds each, move or remove members
+- [x] Cost prices, customer data, money actions, settings and reports each have their own permission; costs are never wiped by someone who cannot see them
+- [x] Reviews screen for moderating every customer review
+- [x] Staff made before roles existed keep the original staff access ([staff guide](05-staff-guide.md))
+- [x] Tick orders to print **shipping labels** (address, big PIN code, cash to collect or "prepaid", sender) and **packing slips** (items with tick boxes, SKU, gifts to pack), and to **mark many orders shipped at once** with one courier, each parcel's tracking number (typed or pasted from the courier's list) and a tracking link; orders that are not ready are skipped with the reason
+- [x] Move orders to Paid, Shipped, Delivered, with the courier, tracking number and tracking link typed when shipping; customers see them in My orders and in the shipped message
 - [x] Approve or decline returns with a written reason
 - [x] Answer or delete product questions
 - [x] See stock and prices without cost prices
@@ -68,7 +80,7 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] Products: create, edit, delete; own or affiliate; draft or published; pictures, videos, highlights, specifications, price and original price, deal label, delivery and return text, tax rate, stock and low-stock level, cost price
 - [x] Bulk edit up to 500 products with a preview
 - [x] Options and prices: one product in several versions, with choices the admin names (size, colour, wattage, battery...), up to two at once, each combination with its own price, MRP, stock, cost and picture; customers choose like on Amazon or Flipkart and pay that option's price
-- [x] Spreadsheet import with a dry run, and full export
+- [x] Spreadsheet import with a dry run, and full export, including HSN codes and options (and, when used, option SKUs and weights)
 - [x] Categories with parents and children
 
 ### Selling and marketing
@@ -90,10 +102,10 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] Weekly or monthly sales report by email
 - [x] Abandoned carts list with automatic reminders
 - [x] Waiting stock alerts, low-stock alert emails, "Attention" list
-- [x] Audit log of every admin and staff change, including blocked attempts
+- [x] Audit log of every admin and team change, including blocked attempts and role changes
 
 ### People and branding
-- [x] Users: search, filter, export, change roles (customer, staff, admin), sign a person out everywhere
+- [x] Users: search, filter, export, change roles (customer, team roles, admin), sign a person out everywhere
 - [x] Logo designer: picture logo with 3D, shadow or glow effects and one-click transparent background, or a text logo with 14 fonts, a colour for every letter, gradients and 3D, outline or glow effects
 - [x] Pages & policies: edit or hide the terms, privacy, shipping, refund and affiliate pages, add pages of your own with a live preview, and change the message bar and footer note
 - [x] Legal and grievance details (registered name, GSTIN, grievance officer) set in the admin portal
@@ -114,11 +126,11 @@ A checklist you can use to show a client what they are getting, or to check noth
 - [x] Security: server-enforced roles, secure cookies, rate limits, upload checks by content, hashed codes and tokens, production start refuses unsafe settings
 - [x] SEO: titles, descriptions, canonical addresses, sitemap, robots file, product structured data
 - [x] Accessibility checks and speed checks in the test suite
-- [x] 208 unit tests and 282 browser tests run on every change
+- [x] 363 unit tests and 536 browser tests run on every change
 
 ## Not included (be honest with clients)
 
 - Automatic cash refunds: cash-on-delivery refunds are sent by the admin by hand, then recorded in the system.
-- Courier integrations and shipping labels: orders are marked shipped by hand.
-- Multiple warehouses, colour as part of a size's stock line, and multi-currency.
+- Courier integrations: the courier, tracking number and link are typed by hand when an order is shipped; nothing is booked with a courier automatically (labels and slips are printed by the store, see above).
+- Per-warehouse reservation of stock for a particular region or sales channel, colour as part of a size's stock line, and multi-currency.
 - A mobile app: the website is mobile friendly and works in any browser.

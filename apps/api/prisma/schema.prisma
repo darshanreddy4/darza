@@ -63,6 +63,9 @@ model User {
   // Phone and Google sign-ups get a random hash nobody knows; they can set a real password with "forgot password".
   passwordHash     String
   role             Role              @default(CUSTOMER)
+  // The team role that decides what a STAFF user may do; empty means the original staff permissions.
+  staffRoleId      String?
+  staffRole        StaffRole?        @relation(fields: [staffRoleId], references: [id], onDelete: Restrict)
   emailVerifiedAt  DateTime?
   termsAcceptedAt  DateTime?
   // False for accounts made with a phone number or Google, whose password is a random one nobody knows.
@@ -77,6 +80,8 @@ model User {
   cartSnapshot     CartSnapshot?
   // Bumped on password change/reset to sign out every existing session.
   tokenVersion     Int               @default(0)
+  // Made at checkout from a verified mobile number alone. Such customers pay online, or the delivery charge online and the rest on delivery, until they set a password or confirm an email.
+  guestCheckout    Boolean           @default(false)
   createdAt        DateTime          @default(now())
   orders           Order[]
   wishlist         WishlistItem[]
@@ -88,6 +93,18 @@ model User {
   questions        ProductQuestion[]
   stockAlerts      StockAlert[]
   couponAccess     CouponCustomer[]
+}
+
+// A named set of permissions for team members, made by an admin: customer care, finance, product reviewer and so on.
+model StaffRole {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String   @default("")
+  // Keys such as "orders.view"; the list of valid keys lives in the API.
+  permissions String[] @default([])
+  members     User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 enum AuthTokenType {
@@ -180,7 +197,15 @@ model Product {
   manufacturerInfo String?
 
   // Used on invoices once GST is switched on in store settings; prices already include it.
-  gstRatePercent Int @default(18)
+  gstRatePercent Int     @default(18)
+  // HSN (goods) or SAC (services) code printed on GST invoices: 4, 6 or 8 digits.
+  hsnCode        String?
+  // Weight of one unit in grams, when the store records weights.
+  weightGrams    Int?
+  // Must be paid for online in full: a basket holding it cannot use pay on delivery.
+  onlineOnly     Boolean @default(false)
+  // Part payment: this share of the order is paid online first and the rest on delivery. Only used while the store has part payment switched on.
+  advancePercent Int?
 
   // OWN only
   sku               String?   @unique
@@ -196,39 +221,112 @@ model Product {
 
   // Sizes or weights of the same product (1 kg, 25 kg), each with its own price and stock. When there are any, pricePaise is the lowest option price and stock the total.
   // What the customer chooses between, named by the admin ("Size", "Colour", "Wattage"): one or two, matching the values of each option.
-  optionNames  String[]          @default([])
-  options      ProductOption[]
-  clicks       AffiliateClick[]
-  orderItems   OrderItem[]
-  views        ProductView[]
-  wishlistedBy WishlistItem[]
-  reviews      Review[]
-  questions    ProductQuestion[]
-  stockAlerts  StockAlert[]
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  optionNames    String[]          @default([])
+  options        ProductOption[]
+  warehouseStock WarehouseStock[]
+  clicks         AffiliateClick[]
+  orderItems     OrderItem[]
+  views          ProductView[]
+  wishlistedBy   WishlistItem[]
+  reviews        Review[]
+  questions      ProductQuestion[]
+  stockAlerts    StockAlert[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@index([status, categoryId])
   @@index([status, featured])
 }
 
 model ProductOption {
-  id         String   @id @default(cuid())
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  label      String
+  id                String           @id @default(cuid())
+  productId         String
+  product           Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label             String
   // One value per option name ("Black", "L"); label is them joined with " / ".
-  values     String[] @default([])
+  values            String[]         @default([])
   // One of the product's own pictures, shown when this option is chosen.
-  imageUrl   String?
-  pricePaise Int
-  mrpPaise   Int?
-  stock      Int      @default(0)
-  costPaise  Int?
-  position   Int      @default(0)
+  imageUrl          String?
+  pricePaise        Int
+  mrpPaise          Int?
+  stock             Int              @default(0)
+  costPaise         Int?
+  position          Int              @default(0)
+  // Each option can have its own SKU and weight (grams).
+  sku               String?          @unique
+  weightGrams       Int?
+  // Set when the low-stock email mentioned this option; cleared once it is back above the threshold.
+  lowStockAlertedAt DateTime?
+  warehouseStock    WarehouseStock[]
 
   @@unique([productId, label])
   @@index([productId, position])
+}
+
+// Where stock is kept. The main warehouse holds whatever the other warehouses do not, so a shop with one place needs no extra rows.
+model Warehouse {
+  id        String           @id @default(cuid())
+  name      String           @unique
+  code      String           @unique
+  address   String?
+  isMain    Boolean          @default(false)
+  active    Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  stock     WarehouseStock[]
+  movements StockMovement[]
+}
+
+// Units of one item (a product, or one option of it) kept in a warehouse other than the main one.
+model WarehouseStock {
+  id          String         @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  optionId    String?
+  option      ProductOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  // The option id, or "-" for a product without options; makes one row per warehouse and item.
+  itemKey     String
+  quantity    Int
+
+  @@unique([warehouseId, productId, itemKey])
+  @@index([productId])
+}
+
+enum StockReason {
+  SALE
+  CANCELLED
+  RETURNED
+  RECEIVED
+  ADJUSTMENT
+  TRANSFER
+  EDIT
+  IMPORT
+}
+
+// Every change to the units on hand. Names are copied so the history stays readable after a product is deleted.
+model StockMovement {
+  id           String      @id @default(cuid())
+  createdAt    DateTime    @default(now())
+  productId    String
+  productName  String
+  optionId     String?
+  optionLabel  String?
+  warehouseId  String?
+  warehouse    Warehouse?  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  delta        Int
+  // Units of the item in all warehouses after this change.
+  balanceAfter Int
+  reason       StockReason
+  note         String?
+  orderId      String?
+  actorId      String?
+  actorName    String?
+
+  @@index([productId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([createdAt])
 }
 
 model ProductImage {
@@ -264,6 +362,10 @@ model Order {
   // The part of discountPaise that came from a percentage reward on the progress bar rather than a coupon.
   rewardDiscountPaise Int             @default(0)
   shippingPaise       Int             @default(0)
+  // The pay-on-delivery fee, which is already inside shippingPaise.
+  codFeePaise         Int             @default(0)
+  // Part payment: the share paid online up front; the rest (totalPaise minus this) is collected on delivery. 0 for ordinary orders.
+  advancePaise        Int             @default(0)
   totalPaise          Int
   // Free gifts the order earned by passing the store's gift amounts, to pack with it.
   gifts               String[]        @default([])
@@ -274,6 +376,11 @@ model Order {
   gstApplied          Boolean         @default(false)
   invoiceNumber       String?         @unique
   invoicedAt          DateTime?
+  shippedAt           DateTime?
+  // Who carries the parcel and how the customer follows it; all typed by the admin or staff when the order is marked shipped.
+  courierName         String?
+  trackingNumber      String?
+  trackingUrl         String?
   deliveredAt         DateTime?
   cancelReason        String?
   // The customer agreed to order updates on WhatsApp, sent to the phone number on this order.
@@ -329,6 +436,8 @@ model ReturnRequest {
   refundPaise Int?
   // Pay-on-delivery orders are refunded by hand: the customer's UPI ID, and when and how the admin paid it.
   payoutUpi   String?
+  // The part of the refund that goes back by UPI instead of the online payment; empty on older requests, which pay all of it out for pay-on-delivery orders.
+  payoutPaise Int?
   payoutRef   String?
   paidOutAt   DateTime?
 
@@ -360,6 +469,11 @@ model OrderItem {
   pricePaise     Int
   costPaise      Int?
   gstRatePercent Int     @default(0)
+  // The product's HSN code when it was bought, so the invoice keeps it.
+  hsnCode        String?
+  // The SKU and weight (grams per unit) of the item when it was bought, so packing slips keep them.
+  sku            String?
+  weightGrams    Int?
   // The size or weight bought, kept as text so the order still reads right if the option is later renamed or removed.
   optionId       String?
   optionLabel    String?
@@ -523,6 +637,18 @@ model StoreSettings {
   // Days after delivery that a customer can ask to return an order; 0 turns returns off.
   // Own products at or below this many units count as low stock.
   lowStockThreshold     Int       @default(5)
+  // Show weight and per-option SKU fields on products; they are optional either way.
+  skuWeightEnabled      Boolean   @default(false)
+  // Also flag an option that runs low while the product as a whole still has plenty.
+  optionStockAlerts     Boolean   @default(false)
+  // Show customers a progress bar (placed, preparing, shipped, delivered) on each order in My orders.
+  orderProgressEnabled  Boolean   @default(true)
+  // Let shoppers order with just a verified mobile number, no account or password.
+  guestCheckoutEnabled  Boolean   @default(false)
+  // Guests may choose cash on delivery after paying the delivery charge online.
+  guestCodEnabled       Boolean   @default(true)
+  // Least a guest pays online on a cash-on-delivery order, even when delivery is free.
+  guestMinAdvancePaise  Int       @default(5000)
   // Where low-stock emails go; blank turns them off.
   alertEmail            String?
   // OFF, WEEKLY (Monday) or MONTHLY (the 1st): emails last period's sales report to reportEmail.
@@ -530,6 +656,12 @@ model StoreSettings {
   reportEmail           String?
   reportLastSentAt      DateTime?
   returnWindowDays      Int       @default(7)
+  // Pay on delivery: whether it is offered, the extra fee for it, and the largest order it is allowed for (null: no limit).
+  codEnabled            Boolean   @default(true)
+  codFeePaise           Int       @default(0)
+  codMaxOrderPaise      Int?
+  // Whether products can be sold with part payment (an advance online, the rest on delivery).
+  advanceEnabled        Boolean   @default(false)
   // Storefront look chosen by the admin: DEFAULT (the original look) or one of the named themes.
   theme                 String    @default("DEFAULT")
   // Colours and pictures the admin chose for the header, search bar, category bar and footer:

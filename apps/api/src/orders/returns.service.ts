@@ -9,7 +9,8 @@ import { SmsService } from "../sms/sms.service";
 import { SettingsService } from "../store/settings.service";
 import { DecideReturnDto, RequestReturnDto } from "./order.dto";
 import { OrdersService, orderRef } from "./orders.service";
-import { canRequestReturn, eligibleQty, lineWindow, maskUpi, nextReturnState, payoutDue, returnableQty, returnRefund, type RefundOrder } from "./returns";
+import { canRequestReturn, eligibleQty, lineWindow, maskUpi, nextReturnState, payoutAmount, payoutDue, returnableQty, returnRefund, type RefundOrder } from "./returns";
+import { onlineChargePaise, splitRefund } from "./payment";
 
 const OPEN: ReturnStatus[] = ["REQUESTED", "APPROVED"];
 
@@ -34,9 +35,10 @@ export class ReturnsService {
         const names = new Map(order.items.map((i) => [i.id, itemName(i.product.name, i.optionLabel)]));
         const check = canRequestReturn(order, returnWindowDays, lines);
         if (!check.ok) throw new BadRequestException(check.reason);
-        // Cash on delivery has no payment method to send money back to, so we need somewhere to pay it.
-        const payoutUpi = order.paymentMethod === "COD" ? dto.upiId?.trim() : undefined;
-        if (order.paymentMethod === "COD" && !payoutUpi) throw new BadRequestException("Enter the UPI ID we should send your refund to.");
+        // Cash on delivery has no payment method to send money back to, so we need somewhere to pay it. A part-paid order may need it too, for what was paid on delivery.
+        const needsUpi = order.paymentMethod === "COD" || order.advancePaise > 0;
+        const payoutUpi = needsUpi ? dto.upiId?.trim() : undefined;
+        if (needsUpi && !payoutUpi) throw new BadRequestException("Enter the UPI ID we should send your refund to.");
 
         const picks = dto.items ?? lines.map((l) => ({ orderItemId: l.id, quantity: eligibleQty(order, l, returnWindowDays) })).filter((p) => p.quantity > 0);
         if (picks.length === 0) throw new BadRequestException("Choose at least one item to return.");
@@ -67,16 +69,18 @@ export class ReturnsService {
       include: {
         user: { select: { name: true, email: true, phone: true } },
         items: { include: { orderItem: { select: { id: true, pricePaise: true, optionLabel: true, product: { select: { name: true } } } } } },
-        order: { select: { id: true, status: true, totalPaise: true, discountPaise: true, shippingPaise: true, paymentMethod: true, refundedPaise: true, deliveredAt: true, items: { select: { id: true, quantity: true, pricePaise: true, returnedQty: true } }, returns: { where: { status: "REFUNDED" }, select: { refundPaise: true } } } },
+        order: { select: { id: true, status: true, totalPaise: true, discountPaise: true, shippingPaise: true, paymentMethod: true, advancePaise: true, refundedPaise: true, deliveredAt: true, items: { select: { id: true, quantity: true, pricePaise: true, returnedQty: true } }, returns: { where: { status: "REFUNDED" }, select: { refundPaise: true } } } },
       },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
     return rows.map(({ order, ...r }) => ({
       ...r,
-      order: { id: order.id, status: order.status, totalPaise: order.totalPaise, paymentMethod: order.paymentMethod, refundedPaise: order.refundedPaise, deliveredAt: order.deliveredAt },
+      order: { id: order.id, status: order.status, totalPaise: order.totalPaise, paymentMethod: order.paymentMethod, advancePaise: order.advancePaise, refundedPaise: order.refundedPaise, deliveredAt: order.deliveredAt },
       // What refunding this request would send back, so the admin can see it before confirming.
       payoutDue: payoutDue(r, order.paymentMethod),
+      // What goes (or went) to the customer's UPI ID: the whole refund for cash orders, and for part-paid orders what the online payment could not cover.
+      payoutTotalPaise: r.payoutPaise ?? (order.paymentMethod === "COD" ? r.refundPaise ?? 0 : 0),
       refundPreviewPaise: r.status === "REFUNDED" ? (r.refundPaise ?? 0) : returnRefund(this.refundOrder(order), Object.fromEntries(r.items.map((i) => [i.orderItemId, i.quantity]))).totalPaise,
     }));
   }
@@ -108,18 +112,20 @@ export class ReturnsService {
     const picks = Object.fromEntries(req.items.map((i) => [i.orderItemId, i.quantity]));
     const { totalPaise, completesOrder } = returnRefund(this.refundOrder(order), picks);
 
-    // Money goes first, so a failed refund leaves the request open.
-    const online = order.paymentMethod === "ONLINE" && !!order.paymentId && totalPaise > 0;
-    if (online) await this.orders.refundOnline(order, totalPaise);
+    // Money goes first, so a failed refund leaves the request open. Only what was paid online can go back online; the rest is paid out to the UPI ID.
+    const paidOnline = order.paymentMethod === "ONLINE" && !!order.paymentId;
+    const { onlinePaise, payoutPaise } = paidOnline ? splitRefund(totalPaise, onlineChargePaise(order) - order.refundedPaise) : { onlinePaise: 0, payoutPaise: totalPaise };
+    const online = onlinePaise > 0;
+    if (online) await this.orders.refundOnline(order, onlinePaise);
 
     const updated = await this.prisma.$transaction(async (tx) => {
       for (const i of req.items) {
         const item = order.items.find((x) => x.id === i.orderItemId)!;
         await tx.orderItem.update({ where: { id: item.id }, data: { returnedQty: { increment: i.quantity } } });
-        await restock(tx, item, i.quantity);
+        await restock(tx, item, i.quantity, { reason: "RETURNED", orderId: order.id, note: "Returned items refunded" });
       }
       if (completesOrder) await tx.order.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
-      return tx.returnRequest.update({ where: { id: req.id }, data: { status: "REFUNDED", refundPaise: totalPaise, adminNote: note ?? req.adminNote, resolvedAt: new Date() } });
+      return tx.returnRequest.update({ where: { id: req.id }, data: { status: "REFUNDED", refundPaise: totalPaise, payoutPaise, adminNote: note ?? req.adminNote, resolvedAt: new Date() } });
     });
 
     if (completesOrder) void this.orders.notify(order.id, "refunded", online);
@@ -128,14 +134,14 @@ export class ReturnsService {
   }
 
   // Records that the admin sent a pay-on-delivery refund to the customer's UPI ID.
-  private async markPaidOut(req: { id: string; orderId: string; status: string; refundPaise: number | null; paidOutAt: Date | null; payoutUpi: string | null }, reference: string | null) {
+  private async markPaidOut(req: { id: string; orderId: string; status: string; refundPaise: number | null; payoutPaise: number | null; paidOutAt: Date | null; payoutUpi: string | null }, reference: string | null) {
     const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { paymentMethod: true } });
     if (!order || !payoutDue(req, order.paymentMethod)) throw new ConflictException("There is no refund waiting to be paid out for this request.");
     if (!reference) throw new BadRequestException("Enter the UPI transaction reference so the payout can be traced.");
     // One conditional update, so two admins cannot both record the same payout.
     const { count } = await this.prisma.returnRequest.updateMany({ where: { id: req.id, paidOutAt: null, status: "REFUNDED" }, data: { paidOutAt: new Date(), payoutRef: reference } });
     if (count !== 1) throw new ConflictException("This payout was already recorded.");
-    void this.notify(req.id, "paid", { refundPaise: req.refundPaise ?? 0 });
+    void this.notify(req.id, "paid", { refundPaise: payoutAmount(req, order.paymentMethod) });
     return this.prisma.returnRequest.findUniqueOrThrow({ where: { id: req.id } });
   }
 

@@ -4,7 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { API_URL } from "@/lib/api";
 
 // An account has an email, a phone number or both. "verified" means one of them is confirmed, which is what ordering and reviewing need.
-export interface AuthUser { id: string; email: string | null; phone: string | null; name: string; role: "CUSTOMER" | "STAFF" | "ADMIN"; emailVerified: boolean; verified: boolean; hasPassword: boolean; googleLinked: boolean }
+export interface AuthUser { id: string; email: string | null; phone: string | null; name: string; role: "CUSTOMER" | "STAFF" | "ADMIN"; emailVerified: boolean; verified: boolean; hasPassword: boolean; googleLinked: boolean;
+  // What the user may do in the admin area, and the name of their team role.
+  permissions: string[]; staffRoleName: string | null; guestCheckout?: boolean }
 
 // What to show as "who is signed in".
 export const accountLabel = (u: Pick<AuthUser, "email" | "phone">) => u.email ?? u.phone ?? "";

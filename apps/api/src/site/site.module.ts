@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Global, Injectable, Module,
 import { randomBytes } from "crypto";
 import sharp from "sharp";
 import type { Prisma, SiteProfile } from "@prisma/client";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { CacheService } from "../cache/cache.service";
 import { PrismaService } from "../prisma.service";
 import { StorageService } from "../storage/storage.service";
@@ -93,19 +93,19 @@ export class SiteController {
   }
 
   @Get("admin/site-profile")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("brand.manage")
   get() {
     return this.site.get();
   }
 
   @Post("admin/site-profile/transparent-logo")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("brand.manage")
   transparentLogo(@Body() body: { url?: unknown; strength?: unknown }) {
     return this.site.transparentLogo(body);
   }
 
   @Put("admin/site-profile")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("brand.manage")
   save(@Body() body: unknown) {
     return this.site.save(body);
   }

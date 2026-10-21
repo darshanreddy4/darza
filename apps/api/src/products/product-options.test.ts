@@ -72,3 +72,11 @@ test("an order line reads with its option", () => {
   assert.equal(itemName("T-Shirt", "Black / L"), "T-Shirt (Black / L)");
   assert.equal(itemName("Basmati Rice", null), "Basmati Rice");
 });
+
+test("each option can carry its own SKU and weight, and one SKU cannot be on two options", () => {
+  const ok = shapeOptions(["Size"], [{ values: ["L"], pricePaise: 100, stock: 1, sku: " TEE-L ", weightGrams: 250 }, { values: ["XL"], pricePaise: 100, stock: 1 }]);
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual([ok.options[0].sku, ok.options[0].weightGrams, ok.options[1].sku, ok.options[1].weightGrams], ["TEE-L", 250, null, null]);
+  const twice = shapeOptions(["Size"], [{ values: ["L"], pricePaise: 100, stock: 1, sku: "TEE-1" }, { values: ["XL"], pricePaise: 100, stock: 1, sku: "tee-1" }]);
+  assert.ok(twice.errors.some((e) => e.includes("used on two options")));
+});

@@ -20,7 +20,7 @@ Sent when the order reaches the status. The same wording is used on every channe
 |---|---|---|---|---|
 | Cash order placed | "We've received your order. You'll pay when it's delivered" | ✅ | ✅ | ✅ |
 | Online payment received | "Your payment went through and your order is confirmed" | ✅ | ✅ | ✅ |
-| Shipped | "Your order has been shipped and is on its way" | ✅ | ✅ | ✅ |
+| Shipped | "Your order has been shipped and is on its way", with the courier and tracking number (and link in the email) when entered | ✅ | ✅ | ✅ |
 | Delivered | "Your order has been delivered. A review helps other shoppers" | ✅ | ✅ | ✅ |
 | Cancelled (by customer or admin) | Says if a refund was started and that banks take 5 to 7 business days | ✅ | ✅ | ✅ |
 | Refunded | Amount refunded, to the original payment method or "marked as refunded" for cash | ✅ | ✅ | ✅ |

@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Post, Put, UseGuards } from "@nestjs/common";
 import type { PolicyPage } from "@prisma/client";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { CacheService } from "../cache/cache.service";
 import { PrismaService } from "../prisma.service";
 import { MAX_CUSTOM_PAGES, isBuiltin, sanitizePage, slugProblem, slugify } from "./pages";
@@ -96,25 +96,25 @@ export class PagesController {
   }
 
   @Get("admin/pages")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   adminList() {
     return this.pages.adminList();
   }
 
   @Post("admin/pages")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   create(@Body() body: unknown) {
     return this.pages.create(body);
   }
 
   @Put("admin/pages/:id")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   update(@Param("id") id: string, @Body() body: unknown) {
     return this.pages.update(id, body);
   }
 
   @Delete("admin/pages/:id")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("content.manage")
   remove(@Param("id") id: string) {
     return this.pages.remove(id);
   }

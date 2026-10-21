@@ -1,6 +1,6 @@
 # 04 Admin guide: running and configuring the store
 
-The admin console is at `/admin` on your website. Log in with an account whose role is **Admin**. The left menu lists every screen below. (Staff see a smaller menu, see [05 Staff guide](05-staff-guide.md).)
+The admin console is at `/admin` on your website. Log in with an account whose role is **Admin**. The left menu lists every screen below. (Team members see only the screens their role allows, see [05 Staff guide](05-staff-guide.md).)
 
 ```mermaid
 flowchart TD
@@ -28,7 +28,7 @@ flowchart TD
 3. **Categories**, then **Products**.
 4. **Home page** and **Banners**.
 5. **Coupons** for your first offers.
-6. **Users**: give your team the Staff role.
+6. **Team & roles**: make a role for each job (customer care, finance, product reviewer...), then give each team member a role.
 
 ## Overview
 
@@ -95,16 +95,21 @@ Check the colours on both previews: a dark logo needs the light preview, a light
 | Section | Fields | Effect |
 |---|---|---|
 | Delivery charges | Delivery fee (₹); free delivery for orders of ₹ or more; free delivery on everything for orders of ₹ or more | Fee added at checkout. Leave the free-over amount empty to never give free delivery; set the fee to 0 for always free. Default ₹49, free from ₹499. The first amount is measured on the whole basket but only waives the charge on regular products; the "everything" amount waives every delivery charge, heavy items and areas with their own fee included (see Delivery rules below) |
+| Pay on delivery | Offer it or not, an extra fee, and an optional largest order size | The fee is added to the total only when the customer picks pay on delivery, and is shown at checkout. An order above the size limit (or any order, when it is switched off) must be paid online: checkout greys the option out and says why, and the server refuses it too. The fee is part of the delivery charge on the order and invoice ("Delivery and cash-on-delivery charge"). Online payments must be set up before you switch cash off |
+| Part payment | Switch it on or off | When on, each own product gets a **How customers can pay** choice where you can set a share (10 to 90 percent, for example 30 or 40) paid online first. Customers then pay that share when ordering and the rest in cash or UPI when the order arrives. It needs online payments, and a basket can be part-paid only when every product in it allows it (the highest share in the basket is taken). Products set to part payment cannot be bought with cash alone; paying everything online is still allowed. Switching it off turns those products back into ordinary ones, keeping their share for later |
 | Delivery by area | Name, PIN code starts (for example 79, 744, 795001), fee, optional free-over amount | Customers whose PIN code starts with one of those digits pay the area's fee instead of the store fee (the longest matching start wins). Tick "free for bigger orders" to let big orders ship free there; leave it off for never free by amount |
 | Rewards for big orders | Order amount, then either a **free gift or surprise** (its name) or a **percentage off the order** (with an optional maximum in rupees); up to 8 | Customers see them on a progress line in the cart and checkout, and a small confetti celebration plays when a reward is unlocked. A gift is listed on the order in Orders ("Pack with this order") and in the customer's My orders. A percentage off is taken from the order automatically, before any coupon; only the best one reached applies, they do not add up. Amounts are measured on the cart value before any coupon |
 | Returns | Return window (days) | How long after delivery customers can ask to return. 0 turns returns off. Default 7 |
 | Inventory alerts | Low stock level (units); email the alerts to | When an own product falls to or below the level, one email lists it. Blank address = no alerts. Default level 5 |
+| Order progress bar | **Show an order progress bar on My orders** | On by default. Each order shows four steps (placed, preparing, shipped with date and courier, delivered) following the status you set on the Orders screen. Switch it off to show customers only the status badge. Cancelled and refunded orders never show a bar |
+| Weights, SKUs and option stock | **Record weight and a SKU for each option**; **Low stock alerts for each option** | Both are off until you switch them on, and either can be switched off again (what you saved is kept). The first adds a weight in grams to every product and a SKU and weight to every option on the product page; packing slips then print the SKU of the exact option bought and the parcel weight, and labels show the weight. The second also flags one option that runs low (size L down to 2 while XL has 40) on the Attention list and in the low stock email, as long as the product as a whole is above the level. An option is mentioned once and again only after it has recovered |
+| Guest checkout | **Allow guest checkout**; **Let guests pay the delivery charge now and the rest on delivery**; **Least a guest pays online (₹)** | Off until you switch it on; needs text messages (SMS) and online payments. A shopper without an account gives a name, a mobile number and the code sent to it (and accepts the Terms), and a simple account is kept so they can track orders by signing in with a code. A guest can pay everything online. Pay on delivery in full is never offered to a guest. With the second option on, a guest may pay the delivery charge (plus your pay-on-delivery fee) online first and the rest in cash or UPI to the courier, so a refused parcel costs you nothing; the least-online amount covers free or cheap delivery. It follows your pay-on-delivery size limit, online-only products and part-payment shares. Guest orders show a **Guest** badge on Orders, and the label shows the cash to collect. Confirming an email address ends guest status and opens up normal pay on delivery |
 | Sales report by email | How often (off, weekly on Monday, monthly on the 1st); send it to | A CSV of the last period's sales, with tax columns, is emailed automatically. A "send now" button is provided |
 | GST and invoices | GSTIN, business name on invoices, business address, state, GST on delivery charges, invoice number prefix | With GST on, invoices are tax invoices with your details; otherwise bills of supply. Invoice numbers run in sequence from the prefix (for example DZ/2026-27/00001, with the financial year in the middle) |
 
 ## Products
 
-**List:** search by name or SKU; filter by type (own or affiliate), status (draft or published), stock (low or out) and price range; sort by last updated, date added, name, price or stock; select several and **bulk edit** status, featured flag, price or stock; **Export** all products to a spreadsheet; **Import** from a spreadsheet (with a dry run that reports problems before anything changes).
+**List:** search by name or SKU; filter by type (own or affiliate), status (draft or published), stock (low or out) and price range; sort by last updated, date added, name, price or stock; select several and **bulk edit** status, featured flag, price or stock; **Export** all products to a spreadsheet; **Import** from a spreadsheet (with a dry run that reports problems before anything changes). The sheet has a column for the **HSN** code and two for options: `option_names` (for example `Colour | Size`) and `options`, where each option is written as `values ; price ; MRP ; stock ; cost`, values separated by `>` and options by `|`, for example `Black > L ; 499 ; 799 ; 3 | Blue > XL ; 549 ; ; 0`. Leave the cell blank to keep a product's options as they are, list the options to replace them (an option named again keeps its picture, and its cost when you leave the cost out), or write a single `-` to remove them all. Values cannot contain `|`, `;` or `>`. The product's price and stock come from the options.
 
 **Add or edit a product:**
 
@@ -112,14 +117,15 @@ Check the colours on both previews: a dark logo needs the light preview, a light
 |---|---|
 | Basics | Name, address slug, brand, category, short description, status (draft hides it from the shop; published shows it), featured flag |
 | Pictures and video | Upload pictures (first one is the main picture; reorder them), add video links, or upload a short promo video (MP4 or WebM, up to 60 seconds and 50 MB) |
-| Price | Selling price, original price (MRP, shown crossed out), optional deal label |
+| Price | Selling price, original price (MRP, shown crossed out), optional deal label, GST rate, and the **HSN / SAC code** (4, 6 or 8 digits) that is printed beside the product on GST invoices. An order keeps the code it was bought with |
 | Details | Highlights (bullet points), specifications (name and value pairs), delivery information, return policy text |
 | Own product | Stock, SKU, what it cost you (admin-only), low-stock level follows the global setting |
 | Delivery charge (own products) | "Delivery charge": follow the store's rules (default), always free, or always charge (heavy or bulky) with an optional fee | Always charge adds that fee (or the store fee when left empty) once per order for the product, even in a big order. Always free never adds to the charge and the product page says FREE delivery |
 | Returns (own products) | "Can customers return it?": the store's return period (default), a number of days you choose, or **No returns**. A product marked no returns (or whose return text says "No return") shows a crossed-out return icon and "No returns" before purchase, and once it ships no return or refund request can be made for it. Each order keeps the rule it was placed under, even if you change the product later |
 | Product card | Pack size, chosen by what the product is: a quantity in pieces for gadgets and electricals ("1 piece"), ml or litres for shampoo and drinks ("100 ml", "2 L"), grams or kilograms for groceries ("500 g", "1.5 kg"), or free text for several sizes ("600 ml, 800 ml"), sale tag ("Top Discount of the Sale" or "Lowest price in the year", set by you, so only use one that is true), show or hide the "bought" count, and an optional multi-buy offer ("Buy 2 items, save extra 3%") |
 | Affiliate product | Partner (platform) name, partner link, disclosure text |
-| Options and prices (own products) | For a product that comes in versions: clothes in S, M, L or colours, a charger in 20W or 40W, a phone in 5000 mAh or 7000 mAh, rice in 1 kg or 25 kg. Click **+ Add option** and type **what the customer chooses** in your own words (Size, Wattage, Battery, Colour, anything; the suggestion buttons are only shortcuts). Optionally add a **second choice**, for example Colour with Size, and there is one option for each combination. **Add many at once** turns a list like `S, M, L, XL` (and a second list) into rows for you. Each option has its own price, MRP, stock, private cost and, if you like, a picture chosen from the product's images (the page switches to it, which suits colours; if every colour has a picture, the colours show as picture tiles). Customers pick on the product page, as on Amazon or Flipkart: the price follows the choice, choices that do not exist or are sold out are crossed out, and the cart, checkout and invoice show the choice and charge its price. The product itself shows the lowest price ("From") and the total stock, and its card says **Select options** instead of adding to the cart. Editing an option keeps it for customers who already have it in their cart; removing every option goes back to one price. Not available together with a timed sale. Bulk price and stock changes and CSV price and stock columns skip these products; change their options on the product page |
+| Options and prices (own products) | For a product that comes in versions: clothes in S, M, L or colours, a charger in 20W or 40W, a phone in 5000 mAh or 7000 mAh, rice in 1 kg or 25 kg. Click **+ Add option** and type **what the customer chooses** in your own words (Size, Wattage, Battery, Colour, anything; the suggestion buttons are only shortcuts). Optionally add a **second choice**, for example Colour with Size, and there is one option for each combination. **Add many at once** turns a list like `S, M, L, XL` (and a second list) into rows for you. Each option has its own price, MRP, stock, private cost and, if you like, a picture chosen from the product's images (the page switches to it, which suits colours; if every colour has a picture, the colours show as picture tiles). Customers pick on the product page, as on Amazon or Flipkart: the price follows the choice, choices that do not exist or are sold out are crossed out, and the cart, checkout and invoice show the choice and charge its price. The product itself shows the lowest price ("From") and the total stock, and its card says **Select options** instead of adding to the cart. Editing an option keeps it for customers who already have it in their cart; removing every option goes back to one price. With the weight and SKU switch on in Settings, each option also has its own **SKU** (letters, numbers and . _ / - only, unique across all products and options) and **weight in grams**. Not available together with a timed sale. Bulk price and stock changes and CSV price and stock columns skip these products; change their options on the product page |
+| How customers can pay (own products) | **Any way the store offers** (default), **Online payment only** (no pay on delivery for this product: a basket that holds it must be paid for online, and the product page and card say so), or **Part payment** (shown once part payment is on in Settings): the share paid online first, the rest on delivery. Online only and part payment cannot be combined |
 | Timed sale (own products) | A sale price and an end time. The product page shows a countdown ("Sale ends in 02 Hrs : 21 Min : 46 Sec"), the cart and checkout charge the sale price, and the normal selling price returns by itself when the time is up |
 | Colour and size options | A group name shared by the products of one item, plus a colour. The product page then shows colour pictures and size buttons (from the pack size) that open the other products; sold-out sizes are crossed out |
 | Warranty and manufacturer | Warranty wording, and the manufacturer, packer and country of origin as printed on the pack |
@@ -191,10 +197,21 @@ The list shows how many times each code was used and the discount given. **Usage
 
 Filter by status. Open an order to see items, quantities, prices (and your cost, admin only), delivery address, phone, payment method, coupon, whether the customer agreed to WhatsApp updates, the cancellation reason, and any refund. Move it forward with the status control:
 
-- **Placed / Paid → Shipped → Delivered** (staff and admins).
+- **Placed / Paid → Shipped → Delivered** (staff and admins). Choosing **Shipped** opens a small **Shipping details** panel: the **courier** (type any name, or tap a suggestion such as Delhivery, Blue Dart, DTDC, India Post or Self delivery), the **tracking number** and the **tracking link** (the courier's page for that parcel, starting with https://). All three are optional, but a number or link needs the courier. The order is only marked shipped when you press **Mark as shipped**. The customer sees them in My orders (with a **Track shipment** button when there is a link) and in the shipped email, text and WhatsApp message. Once shipped, the same panel stays on the order so you can correct the details with **Save tracking**; the change is recorded in the audit log.
 - **Cancelled** or **Refunded** (admins only): asks for confirmation, returns the stock, and for a paid online order refunds the customer automatically through Razorpay.
 
-Every change emails the customer (and texts or WhatsApps where set up). The invoice link opens the printable invoice.
+Every change emails the customer (and texts or WhatsApps where set up). The invoice link opens the printable invoice. A **part-paid** order says in its details how much was paid online and how much to collect from the customer on delivery (hand over the parcel only when you have it). Cancelling it refunds only the advance, because that is all that was paid.
+
+### Packing and shipping many orders
+
+Tick the boxes beside orders (or press **Select orders to pack** to tick every placed and paid order on screen, up to 50 at a time). Then:
+
+- **Print shipping labels** opens a printable sheet with one label per order: who to deliver to, the street address, the PIN code in large type, the phone number, the order number, and either **COLLECT ₹… CASH** (pay on delivery, or the balance of a part-paid order) or **PREPAID: DO NOT COLLECT**, plus your business name and address as sender.
+- **Print packing slips** gives one page per order with the items (tick boxes, SKU, quantity), any gifts to pack and the payment note. Switch between the two at the top of the page, then press **Print**.
+- **Mark as shipped…** ships all the ticked orders with one courier in one go. Orders that are not placed or paid (already shipped, awaiting payment, cancelled) are left out and listed with the reason. Each customer is told, as when shipping one order.
+  - **Tracking numbers:** type one beside each order, or open **Paste a list from the courier** and paste lines of *order number, then tracking number* (for example `AB12CD34 1234567890`), then press **Fill the numbers**. Lines that match no ticked order are ignored.
+  - **Tracking link:** give the courier's tracking page once, with `{number}` where the tracking number goes (for example `https://courier.example/track/{number}`), and every customer gets a working link for their own parcel.
+  - Everything is checked before anything ships: a courier name is needed with numbers, a number cannot be on two orders, and a link must start with https:// and contain `{number}`.
 
 ## Returns
 
@@ -202,7 +219,7 @@ Every change emails the customer (and texts or WhatsApps where set up). The invo
 |---|---|
 | Needs review | New requests |
 | Approved, Declined, Refunded | Their stage |
-| **Payouts due** | Refunded **cash-on-delivery** returns not yet paid to the customer |
+| **Payouts due** | Refunded **cash-on-delivery** returns not yet paid to the customer, and for part-paid orders the part of a refund the online payment could not cover (the customer's UPI ID is asked for when they request the return) |
 
 For each request you see the customer, items, reason, the amount a refund would be, and (for cash orders) the UPI ID. Actions:
 
@@ -214,9 +231,22 @@ For each request you see the customer, items, reason, the amount a refund would 
 
 Customers' questions per product. Type an answer to publish the question and email the asker, or delete it. Open questions show first.
 
+## Stock & warehouses
+
+Where your stock is kept and a record of every change to it. Every shop starts with one **Main warehouse**; it holds all stock that is not moved elsewhere, so nothing needs setting up if you keep everything in one place.
+
+- **Warehouses:** **+ Add warehouse** (a name, a short code such as BLR, and an optional address). Each card shows the units it holds. A warehouse can be edited, switched off (only when it holds nothing) or deleted (only when it has no history). The main warehouse can be renamed but not switched off or deleted.
+- **Look at one product:** search by name or SKU and press the product. A table shows its units in each warehouse, per option for a product with options. Below it:
+  - **Receive stock:** a delivery arrives in a warehouse. The total on sale goes up.
+  - **Correct a count:** units found or lost. Give a reason (for example "damaged in the warehouse"); you cannot take away more than the warehouse holds.
+  - **Move between warehouses:** the units change place, the total stays the same.
+- **Stock history:** newest first, with who did it, when, which order, and the units left. Filter by warehouse, by kind of change, or to the product you picked. Sales, cancellations, returns, stock set on the product page, bulk edits and CSV imports are written down automatically.
+
+Customers see one total across all warehouses. A sale takes units from the main warehouse first, then from the others, biggest stock first. Cancelled orders and returned items go back to the main warehouse; move them on if they belong elsewhere. Seeing this page needs *See stock alerts*; changing stock needs *Manage stock and warehouses*.
+
 ## Attention
 
-A to-do list of products needing care: low or no stock, missing pictures or descriptions, no reviews.
+A to-do list of products needing care: low or no stock, missing pictures or descriptions, no reviews. With **Low stock alerts for each option** switched on in Settings, a product also appears when one of its options is low even though the total is fine, showing which option (for example "L: 2 left").
 
 ## Abandoned carts
 
@@ -228,11 +258,25 @@ Revenue, units and profit by day, week, month or year; order mix and payment mix
 
 ## Users
 
-Search by email, name or phone; filter by role and verification; see how each person signs in, their order count and spend; export to a spreadsheet. Open a person to change their **role** (Customer, Staff, Admin) or **sign them out of every device**. Deleted customers no longer appear here (their orders remain, labelled "Deleted customer").
+Search by email, name or phone; filter by role and verification; see how each person signs in, their order count and spend; export to a spreadsheet. The **Role** menu on each row makes the person a customer, an admin, or a team member with one of your team roles. You can also **sign them out of every device**. Deleted customers no longer appear here (their orders remain, labelled "Deleted customer").
+
+## Team & roles
+
+The screen where you decide who may do what. Only admins see it.
+
+1. Press **+ New role**. Start from a ready-made role (Customer care executive, Customer care lead, Finance and accounts, Catalogue manager, Product reviewer, Marketing manager, Inventory and warehouse, Order fulfilment executive, Store manager) or from a blank one.
+2. Name it and tick exactly what it may do. Permissions are grouped (orders, returns, products and stock, customers and community, marketing and content, business). Ticking one that needs another ticks that too. Sensitive ones (money, costs, customer data, settings, reports) are marked.
+3. **Create role**. Then give it to people with the Role menu on **Users** or in **Team members** on this screen.
+
+Editing a role changes access for everyone holding it, on their next click. A role in use cannot be deleted; move its members first. **Remove from team** turns someone back into an ordinary customer. See [03 Roles and permissions](03-roles-and-permissions.md) for the full list.
+
+## Reviews
+
+Every customer review, newest first, with photos and videos. Delete the ones that break your rules (needs the *Moderate reviews* permission; admins always have it).
 
 ## Audit log
 
-A history of every change made in the admin area: who, when, what and which record. Names are copied at the time so the record stays readable if an account is later removed. Blocked attempts by staff are listed too.
+A history of every change made in the admin area: who, when, what and which record. Names are copied at the time so the record stays readable if an account is later removed. Blocked attempts (someone trying something their role does not allow) and role changes are listed too.
 
 ## Search index
 
@@ -240,4 +284,4 @@ A history of every change made in the admin area: who, when, what and which reco
 
 ## Things only you can see
 
-Cost prices, profit, customer lists, settings, reports, the audit log and money actions (cancel, refund, payout). Keep the Admin role for owners; give the team Staff.
+Cost prices, profit, customer lists, settings, reports, the audit log and money actions (cancel, refund, payout) are available to a team member only if you give them the matching permission. Keep the Admin role for owners and give everyone else a team role that fits their job. Only admins manage the team and roles.

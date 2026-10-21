@@ -5,6 +5,7 @@ import { orderUpdateSentence, templateParams, whatsAppNumber } from "./whatsapp-
 test("each status has its own plain sentence", () => {
   assert.match(orderUpdateSentence("placed", { totalPaise: 149900, refundIssued: false }), /order for ₹1,499\. You'll pay when it's delivered/);
   assert.match(orderUpdateSentence("shipped", { totalPaise: 0, refundIssued: false }), /shipped/);
+  assert.equal(orderUpdateSentence("shipped", { totalPaise: 0, refundIssued: false, tracking: "Delhivery 1234567" }), "your order has been shipped and is on its way. Tracking: Delhivery 1234567.");
   assert.match(orderUpdateSentence("delivered", { totalPaise: 0, refundIssued: false }), /delivered/);
 });
 

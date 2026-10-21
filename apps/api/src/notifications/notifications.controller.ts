@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, HttpCode, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, Roles, type JwtPayload } from "../auth/auth.guard";
+import { AuthGuard, Permit, type JwtPayload } from "../auth/auth.guard";
 import { PrismaService } from "../prisma.service";
 import { CartRemindersService } from "./cart-reminders.service";
 import { CartSnapshotDto, EmailPreferencesDto, UnsubscribeDto } from "./notifications.dto";
@@ -48,7 +48,7 @@ export class NotificationsController {
 
   @Get("admin/abandoned-carts")
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("analytics.view")
   abandoned() {
     return this.carts.abandoned();
   }

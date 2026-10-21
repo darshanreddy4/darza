@@ -8,16 +8,16 @@ export interface AdminProduct {
   id: string; name: string; slug: string; description: string; brand: string | null; specifications: Record<string, string>;
   categoryId: string; productType: "OWN" | "AFFILIATE"; status: "DRAFT" | "PUBLISHED"; featured: boolean;
   pricePaise: number; mrpPaise: number | null; sellerName: string; deliveryInfo: string | null; returnPolicy: string | null;
-  sku: string | null; stock: number | null; costPaise: number | null; platform: string | null; affiliateUrl: string | null; affiliateDisclosure: string | null;
+  sku: string | null; stock: number | null; costPaise: number | null; weightGrams?: number | null; platform: string | null; affiliateUrl: string | null; affiliateDisclosure: string | null;
   images: { url: string; alt: string | null }[]; videoUrls: string[]; highlights: string[]; createdAt: string; updatedAt: string;
-  showRating: boolean; dealLabel: string | null; deliveryDays: number | null; freeDelivery: boolean; chargeDelivery: boolean; deliveryFeePaise: number | null; showAddToCart: boolean; gstRatePercent: number;
+  showRating: boolean; dealLabel: string | null; deliveryDays: number | null; freeDelivery: boolean; chargeDelivery: boolean; deliveryFeePaise: number | null; showAddToCart: boolean; gstRatePercent: number; hsnCode: string | null; onlineOnly: boolean; advancePercent: number | null;
   packSize: string | null; saleTag: "TOP_DISCOUNT" | "LOWEST_PRICE" | null; showSold: boolean; multiBuyQty: number | null; multiBuyPercent: number | null;
   returnDays: number | null; salePricePaise: number | null; saleEndsAt: string | null; variantGroup: string | null; colorName: string | null; warranty: string | null; manufacturerInfo: string | null;
   // What the customer chooses between ("Colour", "Size") and the versions with their own price and stock; when there are any, pricePaise is the lowest and stock the total.
   optionNames: string[];
   options: AdminProductOption[];
 }
-export interface AdminProductOption { id: string; label: string; values: string[]; imageUrl: string | null; pricePaise: number; mrpPaise: number | null; stock: number; costPaise: number | null }
+export interface AdminProductOption { id: string; label: string; values: string[]; imageUrl: string | null; pricePaise: number; mrpPaise: number | null; stock: number; costPaise: number | null; sku?: string | null; weightGrams?: number | null }
 export interface AdminCategory { id: string; name: string; slug: string; parentId: string | null }
 export interface ClickRow { product?: { name: string; slug: string }; platform: string | null; clicks: number }
 
@@ -78,7 +78,7 @@ export function productToDto(p: AdminProduct, over: Partial<AdminProduct> = {}) 
     pricePaise: m.pricePaise, mrpPaise: v(m.mrpPaise), sellerName: m.sellerName, deliveryInfo: v(m.deliveryInfo),
     returnPolicy: v(m.returnPolicy), sku: v(m.sku), stock: v(m.stock), costPaise: v(m.costPaise), platform: v(m.platform),
     affiliateUrl: v(m.affiliateUrl), affiliateDisclosure: v(m.affiliateDisclosure),
-    showRating: m.showRating, dealLabel: v(m.dealLabel), deliveryDays: v(m.deliveryDays), freeDelivery: m.freeDelivery, chargeDelivery: m.chargeDelivery, deliveryFeePaise: v(m.deliveryFeePaise), showAddToCart: m.showAddToCart, gstRatePercent: m.gstRatePercent,
+    showRating: m.showRating, dealLabel: v(m.dealLabel), deliveryDays: v(m.deliveryDays), freeDelivery: m.freeDelivery, chargeDelivery: m.chargeDelivery, deliveryFeePaise: v(m.deliveryFeePaise), showAddToCart: m.showAddToCart, gstRatePercent: m.gstRatePercent, hsnCode: v(m.hsnCode), weightGrams: v(m.weightGrams ?? null), onlineOnly: m.onlineOnly, advancePercent: v(m.advancePercent),
     packSize: v(m.packSize), saleTag: v(m.saleTag), showSold: m.showSold, multiBuyQty: v(m.multiBuyQty), multiBuyPercent: v(m.multiBuyPercent),
     returnDays: v(m.returnDays), salePricePaise: v(m.salePricePaise), saleEndsAt: v(m.saleEndsAt), variantGroup: v(m.variantGroup), colorName: v(m.colorName), warranty: v(m.warranty), manufacturerInfo: v(m.manufacturerInfo),
     images: m.images.map((i) => ({ url: i.url, alt: v(i.alt) })), videoUrls: m.videoUrls, highlights: m.highlights,

@@ -40,6 +40,21 @@ export class UpdateSettingsDto {
   @IsOptional() @IsIn([...IN_STATES, ""]) businessState?: string;
   @IsOptional() @IsInt() @Min(0) @Max(90) returnWindowDays?: number;
   @IsOptional() @IsInt() @Min(0) @Max(1000) lowStockThreshold?: number;
+  // Show weight and per-option SKU on products; also flag an option that runs low while the product as a whole does not.
+  @IsOptional() @IsBoolean() skuWeightEnabled?: boolean;
+  @IsOptional() @IsBoolean() optionStockAlerts?: boolean;
+  // Show the order progress bar on My orders.
+  @IsOptional() @IsBoolean() orderProgressEnabled?: boolean;
+  // Guest checkout: order with just a verified mobile number. Guests pay online, or the delivery charge (at least this much) online and the rest on delivery.
+  @IsOptional() @IsBoolean() guestCheckoutEnabled?: boolean;
+  @IsOptional() @IsBoolean() guestCodEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(10_000_000) guestMinAdvancePaise?: number;
+  // Pay on delivery: offered or not, its extra fee, and the largest order it is allowed for (0 means no limit). Leaving them out keeps what is saved.
+  @IsOptional() @IsBoolean() codEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000) codFeePaise?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) codMaxOrderPaise?: number;
+  // Part payment: products can ask for a share online first and the rest on delivery.
+  @IsOptional() @IsBoolean() advanceEnabled?: boolean;
   @IsOptional() @IsIn(["OFF", "WEEKLY", "MONTHLY"]) reportSchedule?: string;
   @IsOptional() @IsString() @MaxLength(200) @Matches(/^$|^[^\s@]+@[^\s@]+\.[^\s@]+$/, { message: "reportEmail must be a valid email address" }) reportEmail?: string;
   // An empty string turns the emails off.

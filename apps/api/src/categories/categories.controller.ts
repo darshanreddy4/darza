@@ -1,8 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, Delete, Get, NotFoundException, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
-import { AuthGuard, Roles } from "../auth/auth.guard";
-import { ADMIN_AND_STAFF } from "../auth/permissions";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { CategoryDto } from "./category.dto";
 import { validateCategoryParent } from "./category-rules";
 import { SearchService } from "../search/search.service";
@@ -33,28 +32,29 @@ export class CategoriesController {
 
   @Get("admin/categories")
   @UseGuards(AuthGuard)
-  @Roles(...ADMIN_AND_STAFF)
+  // The other screens that pick a category (home page, banners, analytics) read this list too.
+  @Permit("products.view", "categories.manage", "content.manage", "analytics.view")
   listAll() {
     return this.prisma.category.findMany({ orderBy: { name: "asc" } });
   }
 
   @Post("admin/categories")
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("categories.manage")
   create(@Body() dto: CategoryDto) {
     return this.save(undefined, dto);
   }
 
   @Put("admin/categories/:id")
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("categories.manage")
   update(@Param("id") id: string, @Body() dto: CategoryDto) {
     return this.save(id, dto);
   }
 
   @Delete("admin/categories/:id")
   @UseGuards(AuthGuard)
-  @Roles("ADMIN")
+  @Permit("categories.manage")
   async remove(@Param("id") id: string) {
     const removed = await this.prisma.category.delete({ where: { id } }).catch(mapError);
     await this.cache.invalidate();

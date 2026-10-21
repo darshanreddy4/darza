@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { UpdateSettingsDto } from "./settings.dto";
 import { SettingsService } from "./settings.service";
 
@@ -19,13 +19,13 @@ export class SettingsController {
   }
 
   @Get("admin/settings")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("settings.manage")
   get() {
     return this.settings.get();
   }
 
   @Put("admin/settings")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("settings.manage")
   update(@Body() dto: UpdateSettingsDto) {
     return this.settings.update(dto);
   }

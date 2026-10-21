@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 import { API_URL, formatPrice } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-interface Line { description: string; quantity: number; amountPaise: number; gstRatePercent: number; taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number }
+interface Line { description: string; hsnCode?: string | null; quantity: number; amountPaise: number; gstRatePercent: number; taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number }
 interface Invoice {
-  number: string; issuedAt: string; type: "TAX_INVOICE" | "BILL_OF_SUPPLY"; orderRef: string; orderDate: string; paymentMethod: string; couponCode: string | null;
+  number: string; issuedAt: string; type: "TAX_INVOICE" | "BILL_OF_SUPPLY"; orderRef: string; orderDate: string; paymentMethod: string; advancePaise?: number; couponCode: string | null;
   seller: { name: string; address: string | null; state: string | null; gstin: string | null };
   buyer: { name: string; phone: string; address: string[]; state: string };
   intraState: boolean; lines: Line[];
@@ -86,7 +86,7 @@ export function InvoiceView({ orderId }: { orderId: string }) {
           </div>
           <div className="sm:text-right">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Payment</h2>
-            <p className="mt-1">{inv.paymentMethod === "ONLINE" ? "Paid online" : "Pay on delivery"}</p>
+            <p className="mt-1">{inv.paymentMethod === "ONLINE" ? (inv.advancePaise ? `Part paid online (${formatPrice(inv.advancePaise)}); the balance is paid on delivery` : "Paid online") : "Pay on delivery"}</p>
             {tax && <p className="text-muted">Place of supply: {inv.buyer.state}</p>}
           </div>
         </section>
@@ -101,7 +101,7 @@ export function InvoiceView({ orderId }: { orderId: string }) {
             <tbody className="divide-y divide-line">
               {inv.lines.map((l, i) => (
                 <tr key={i}>
-                  <td className="px-3 py-2">{l.description}</td><td className={num}>{l.quantity}</td>
+                  <td className="px-3 py-2">{l.description}{tax && l.hsnCode && <span className="block text-xs text-muted">HSN {l.hsnCode}</span>}</td><td className={num}>{l.quantity}</td>
                   {tax && <><td className={num}>{formatPrice(l.taxablePaise)}</td>{inv.intraState ? <><td className={num}>{formatPrice(l.cgstPaise)}</td><td className={num}>{formatPrice(l.sgstPaise)}</td></> : <td className={num}>{formatPrice(l.igstPaise)}</td>}<td className={num}>{l.gstRatePercent}%</td></>}
                   <td className={num}>{formatPrice(l.amountPaise)}</td>
                 </tr>

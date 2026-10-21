@@ -80,6 +80,8 @@ Each product page is also prepared for search engines (title, description, struc
 
 **Verified** means an email address or mobile number has been confirmed. Unverified visitors can browse, search, use the cart and wishlist. They must verify to **place an order, write a review or ask a question**; a banner and a "send me a verification email" button guide them.
 
+**Without an account (guest checkout, when the store switches it on):** at login or checkout the shopper taps "Continue as a guest", gives a name and a mobile number, accepts the Terms and enters the code sent by text. No password is needed. They then pay online, either the full amount or just the delivery charge now with the rest in cash when the parcel arrives. Pay on delivery in full is not offered. They can sign in again later with a code to follow or return the order, and can add an email at any time to become a regular customer.
+
 ## 6. Address and phone number
 
 - **My account → Saved addresses:** add, edit, delete and choose a default. An address has name, phone, address lines, city, state and pincode.
@@ -92,13 +94,16 @@ Each product page is also prepared for search engines (title, description, struc
 1. **Review:** items, subtotal, coupon discount, delivery fee, tax treatment, total.
 2. **Choose payment:**
    - **Cash on delivery:** the order is placed immediately.
+   - **Guests (no account):** pay the full amount online, or **pay the delivery charge now and the rest on delivery** (the checkout shows both amounts). Cash only is not offered.
    - **Online (when the store has Razorpay):** the customer pays by card, UPI or net banking in the secure Razorpay window. If they do not finish, the order stays "Awaiting payment" and holds the stock for **30 minutes**, then is cancelled automatically and the stock released. A "Pay now" button on My orders lets them complete it within that time.
 3. **WhatsApp tick (optional, when the store has WhatsApp):** "Send my order updates on WhatsApp". Only customers who tick it are messaged.
 4. **Place order.** Stock is reserved at once, so two customers can never buy the last unit.
 
 ## 8. Order tracker (My orders)
 
-Each order card shows the order number, date, items, price breakdown and a status badge:
+Each order card shows a **progress bar** (when the store has it switched on): four steps, **Order placed**, **Preparing**, **Shipped** and **Delivered**. Finished steps are ticked, the current step pulses, and the Shipped step shows its date and the courier. A line underneath says it in words ("Your order is confirmed and is being prepared", "Your order is on its way"). An online order that is not paid yet stays on the first step ("Awaiting payment"); cancelled and refunded orders show no bar. The bar follows the status set on the Orders screen.
+
+Each order card also shows the order number, date, items, price breakdown and a status badge:
 
 ```mermaid
 stateDiagram-v2

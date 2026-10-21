@@ -12,6 +12,8 @@ export class RazorpayService {
   get keySecret() { return process.env.RAZORPAY_KEY_SECRET ?? ""; }
   get webhookSecret() { return process.env.RAZORPAY_WEBHOOK_SECRET ?? ""; }
   get enabled() { return !!this.keyId && !!this.keySecret; }
+  // Only the tests change this, to point at a stand-in server.
+  private get apiUrl() { return process.env.RAZORPAY_API_URL || "https://api.razorpay.com/v1"; }
 
   createOrder(amountPaise: number, receipt: string): Promise<RazorpayOrder> {
     return this.post<RazorpayOrder>("/orders", { amount: amountPaise, currency: "INR", receipt }, "Could not start the online payment. Please try again or choose pay on delivery.");
@@ -25,7 +27,7 @@ export class RazorpayService {
   private async post<T>(path: string, body: unknown, failure: string): Promise<T> {
     const auth = Buffer.from(`${this.keyId}:${this.keySecret}`).toString("base64");
     try {
-      const res = await fetch(`https://api.razorpay.com/v1${path}`, {
+      const res = await fetch(`${this.apiUrl}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Basic ${auth}` },
         body: JSON.stringify(body),

@@ -2,12 +2,13 @@ import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCod
 import { OrderStatus } from "@prisma/client";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { Request } from "express";
-import { AllowAnonymous, AuthGuard, RequireVerified, Roles, type JwtPayload } from "../auth/auth.guard";
-import { ADMIN_AND_STAFF, canSetOrderStatus, withoutCost } from "../auth/permissions";
+import { AllowAnonymous, AuthGuard, Permit, RequireVerified, type JwtPayload } from "../auth/auth.guard";
+import { canSetOrderStatus, withoutCost } from "../auth/permissions";
 import { RazorpayService } from "../payments/razorpay.service";
 import { verifyWebhookSignature } from "../payments/signature";
 import { Throttle } from "@nestjs/throttler";
-import { CancelOrderDto, CreateOrderDto, QuoteDto, UpdateOrderStatusDto, VerifyPaymentDto } from "./order.dto";
+import { BulkShipDto, CancelOrderDto, CreateOrderDto, QuoteDto, TrackingDto, UpdateOrderStatusDto, VerifyPaymentDto } from "./order.dto";
+import { parseIds } from "./shipping";
 import { InvoiceService } from "./invoice.service";
 import { OrdersService } from "./orders.service";
 
@@ -87,17 +88,41 @@ export class OrdersController {
 
   @Get("admin/orders")
   @UseGuards(AuthGuard)
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("orders.view")
   async listAdmin(@Req() req: { user: JwtPayload }, @Query("status", new ParseEnumPipe(OrderStatus, { optional: true })) status?: OrderStatus) {
     const orders = await this.orders.listAdmin(status);
-    return orders.map((o) => ({ ...o, items: o.items.map((i) => withoutCost(req.user.role, i)) }));
+    return orders.map((o) => ({ ...o, items: o.items.map((i) => withoutCost(req.user.permissions, i)) }));
+  }
+
+  // Shipping labels and packing slips for up to 50 orders, in the order asked for.
+  @Get("admin/orders/labels")
+  @UseGuards(AuthGuard)
+  @Permit("orders.view")
+  labels(@Query("ids") ids = "") {
+    return this.orders.labels(parseIds(ids));
+  }
+
+  @Post("admin/orders/bulk-ship")
+  @HttpCode(200)
+  @UseGuards(AuthGuard)
+  @Permit("orders.process")
+  bulkShip(@Body() dto: BulkShipDto) {
+    return this.orders.bulkShip(dto.ids, dto.courierName, dto.trackingNumbers, dto.trackingUrlTemplate);
   }
 
   @Patch("admin/orders/:id/status")
   @UseGuards(AuthGuard)
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("orders.process", "orders.cancel")
   updateStatus(@Req() req: { user: JwtPayload }, @Param("id") id: string, @Body() dto: UpdateOrderStatusDto) {
-    if (!canSetOrderStatus(req.user.role, dto.status)) throw new ForbiddenException("Only an admin can cancel or refund an order.");
-    return this.orders.updateStatus(id, dto.status);
+    if (!canSetOrderStatus(req.user.permissions, dto.status)) throw new ForbiddenException("Your role cannot do this: cancelling or refunding needs the cancel and refund permission, other changes need the process orders permission.");
+    return this.orders.updateStatus(id, dto.status, dto);
+  }
+
+  // Courier details can be added or corrected after the order has shipped.
+  @Patch("admin/orders/:id/tracking")
+  @UseGuards(AuthGuard)
+  @Permit("orders.process")
+  setTracking(@Param("id") id: string, @Body() dto: TrackingDto) {
+    return this.orders.setTracking(id, dto);
   }
 }

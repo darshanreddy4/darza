@@ -1,7 +1,6 @@
 import { Controller, Delete, Get, HttpCode, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, Roles, type JwtPayload } from "../auth/auth.guard";
-import { ADMIN_AND_STAFF } from "../auth/permissions";
+import { AuthGuard, Permit, type JwtPayload } from "../auth/auth.guard";
 import { StockAlertsService } from "./stock-alerts.service";
 
 @Controller()
@@ -31,7 +30,7 @@ export class StockAlertsController {
 
   @Get("admin/stock-alerts")
   @UseGuards(AuthGuard)
-  @Roles(...ADMIN_AND_STAFF)
+  @Permit("inventory.view")
   waiting() {
     return this.alerts.waiting();
   }

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Put, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { AuthGuard, Roles } from "../auth/auth.guard";
+import { AuthGuard, Permit } from "../auth/auth.guard";
 import { UpdateAppearanceDto } from "./appearance.dto";
 import { AppearanceService } from "./appearance.service";
 
@@ -16,13 +16,13 @@ export class AppearanceController {
   }
 
   @Get("admin/appearance")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("brand.manage")
   admin() {
     return this.appearance.adminView();
   }
 
   @Put("admin/appearance")
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("brand.manage")
   update(@Body() dto: UpdateAppearanceDto) {
     return this.appearance.update(dto);
   }
@@ -30,7 +30,7 @@ export class AppearanceController {
   @Post("admin/appearance/refresh-rates")
   @HttpCode(200)
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
-  @UseGuards(AuthGuard) @Roles("ADMIN")
+  @UseGuards(AuthGuard) @Permit("brand.manage")
   refresh() {
     return this.appearance.refreshRates();
   }
