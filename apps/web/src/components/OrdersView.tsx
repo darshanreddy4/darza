@@ -12,7 +12,7 @@ import { Select } from "@/components/Select";
 interface Order {
   id: string; status: string; totalPaise: number; createdAt: string; paymentMethod: string;
   subtotalPaise: number; discountPaise: number; rewardDiscountPaise: number; shippingPaise: number; couponCode: string | null; refundedPaise: number; gifts: string[];
-  items: { id: string; quantity: number; pricePaise: number; returnedQty: number; returnableQty: number; returnWindowDays: number; product: { name: string; slug: string } }[];
+  items: { id: string; quantity: number; pricePaise: number; returnedQty: number; returnableQty: number; returnWindowDays: number; optionLabel: string | null; product: { name: string; slug: string } }[];
   returns: { id: string; status: "REQUESTED" | "APPROVED" | "REJECTED" | "REFUNDED"; reason: string; adminNote: string | null; refundPaise: number | null; payoutUpi: string | null; paidOutAt: string | null; items: { orderItemId: string; quantity: number }[] }[];
   returnableUntil: string | null;
   cancelReason: string | null;
@@ -28,7 +28,7 @@ function ReturnPanel({ order, onDone }: { order: Order; onDone: () => void }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const returnable = order.items.filter((i) => i.returnableQty > 0);
-  const nameOf = (id: string) => order.items.find((i) => i.id === id)?.product.name ?? "Item";
+  const nameOf = (id: string) => { const i = order.items.find((x) => x.id === id); return i ? `${i.product.name}${i.optionLabel ? ` (${i.optionLabel})` : ""}` : "Item"; };
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -66,7 +66,7 @@ function ReturnPanel({ order, onDone }: { order: Order; onDone: () => void }) {
             <legend className="font-medium">Which items are you returning?</legend>
             {returnable.map((i) => (
               <div key={i.id} className="flex flex-wrap items-center justify-between gap-2">
-                <label className="flex items-center gap-2"><input type="checkbox" name={`pick-${i.id}`} defaultChecked className="h-4 w-4 accent-emerald-600" /> {i.product.name}</label>
+                <label className="flex items-center gap-2"><input type="checkbox" name={`pick-${i.id}`} defaultChecked className="h-4 w-4 accent-emerald-600" /> {i.product.name}{i.optionLabel ? ` (${i.optionLabel})` : ""}</label>
                 {i.returnableQty > 1 ? (
                   <label className="flex items-center gap-2 text-xs text-muted">Quantity
                     <Select name={`qty-${i.id}`} defaultValue={i.returnableQty} className="rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink">
@@ -219,7 +219,7 @@ export function OrdersView({ placed, reason }: { placed?: "1" | "paid" | "unpaid
               </div>
               <ul className="mt-3 divide-y divide-line text-sm">
                 {o.items.map((i) => (
-                  <li key={i.id} className="flex justify-between gap-3 py-2"><span><Link href={`/products/${i.product.slug}`} className="hover:text-brand-700">{i.product.name} × {i.quantity}</Link>{i.returnWindowDays === 0 && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Non-returnable</span>}</span><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>
+                  <li key={i.id} className="flex justify-between gap-3 py-2"><span><Link href={`/products/${i.product.slug}`} className="hover:text-brand-700">{i.product.name}{i.optionLabel ? ` (${i.optionLabel})` : ""} × {i.quantity}</Link>{i.returnWindowDays === 0 && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Non-returnable</span>}</span><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>
                 ))}
               </ul>
               {(o.discountPaise > 0 || o.shippingPaise > 0) && (

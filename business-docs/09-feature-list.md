@@ -67,6 +67,7 @@ A checklist you can use to show a client what they are getting, or to check noth
 ### Catalogue
 - [x] Products: create, edit, delete; own or affiliate; draft or published; pictures, videos, highlights, specifications, price and original price, deal label, delivery and return text, tax rate, stock and low-stock level, cost price
 - [x] Bulk edit up to 500 products with a preview
+- [x] Options and prices: one product in several versions, with choices the admin names (size, colour, wattage, battery...), up to two at once, each combination with its own price, MRP, stock, cost and picture; customers choose like on Amazon or Flipkart and pay that option's price
 - [x] Spreadsheet import with a dry run, and full export
 - [x] Categories with parents and children
 
@@ -119,5 +120,5 @@ A checklist you can use to show a client what they are getting, or to check noth
 
 - Automatic cash refunds: cash-on-delivery refunds are sent by the admin by hand, then recorded in the system.
 - Courier integrations and shipping labels: orders are marked shipped by hand.
-- Multiple warehouses, variants (size and colour as separate stock lines), and multi-currency.
+- Multiple warehouses, colour as part of a size's stock line, and multi-currency.
 - A mobile app: the website is mobile friendly and works in any browser.

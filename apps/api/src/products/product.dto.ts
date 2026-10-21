@@ -10,6 +10,20 @@ export class ProductImageDto {
   @IsOptional() @IsString() @MaxLength(200) alt?: string;
 }
 
+export class ProductOptionDto {
+  // Set when editing an option that already exists, so carts and orders keep pointing at it.
+  @IsOptional() @IsString() @MaxLength(40) id?: string;
+  // Either the values (one per kind of option, like ["Black", "L"]) or, for a single kind, just a label.
+  @IsOptional() @IsString() @MaxLength(40) label?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(2) @IsString({ each: true }) @MaxLength(40, { each: true }) values?: string[];
+  // One of the product's own pictures.
+  @IsOptional() @IsString() @MaxLength(2000) @Matches(/^(https:\/\/\S+|\/uploads\/[A-Za-z0-9._-]+)$/) imageUrl?: string;
+  @IsInt() @Min(0) @Max(100_000_000) pricePaise!: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) mrpPaise?: number;
+  @IsInt() @Min(0) @Max(1_000_000) stock!: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) costPaise?: number;
+}
+
 export class ProductDto {
   @IsString() @MinLength(1) @MaxLength(200) name!: string;
   @IsString() @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/) @MaxLength(200) slug!: string;
@@ -66,4 +80,12 @@ export class ProductDto {
 
   @IsOptional() @IsArray() @ArrayMaxSize(12) @IsString({ each: true }) @MaxLength(400, { each: true })
   highlights?: string[];
+
+  // What the customer chooses between, like Colour and Size, named by the admin. Up to two; each option then has one value per name.
+  @IsOptional() @IsArray() @ArrayMaxSize(2) @IsString({ each: true }) @MaxLength(30, { each: true })
+  optionNames?: string[];
+
+  // Versions of the product with their own price and stock. Left out means the product's current options stay as they are; an empty list removes them.
+  @IsOptional() @IsArray() @ArrayMaxSize(60) @ValidateNested({ each: true }) @Type(() => ProductOptionDto)
+  options?: ProductOptionDto[];
 }

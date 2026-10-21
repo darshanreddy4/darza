@@ -11,6 +11,7 @@ import { ShareButton } from "@/components/ShareButton";
 import { PincodeCheck } from "@/components/PincodeCheck";
 import { TrustStrip } from "@/components/TrustStrip";
 import { VariantOptions } from "@/components/VariantOptions";
+import { OptionPicker, OptionPrice, OptionsProvider } from "@/components/ProductOptions";
 import { absoluteUrl, breadcrumbJsonLd, describe, productJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/JsonLd";
 import { getBrand, getSiteUrl } from "@/lib/site-profile";
@@ -75,6 +76,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
   const discount = discountPercent(product);
   const specs = Object.entries(product.specifications ?? {});
   const own = product.productType === "OWN";
+  const hasSizes = (product.options?.length ?? 0) > 0;
   const highlights = product.highlights ?? [];
   const details: [string, React.ReactNode][] = [
     ...(product.brand ? [["Brand", product.brand] as [string, React.ReactNode]] : []),
@@ -106,6 +108,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
         <span className="text-ink">{product.name}</span>
       </nav>
 
+      <OptionsProvider names={product.optionNames ?? []} options={product.options ?? []}>
       <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
         <div className="min-w-0 lg:sticky lg:top-40 lg:self-start">
           <ProductGallery key={product.id} images={product.images} videoUrls={product.videoUrls ?? []} name={product.name} />
@@ -131,6 +134,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
             </div>
 
             <div>
+              {hasSizes ? <OptionPrice /> : (
               <div className="flex flex-wrap items-baseline gap-3">
                 <span className="font-display text-4xl font-bold"><Money paise={product.pricePaise} /></span>
                 {discount > 0 && (
@@ -141,6 +145,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
                 )}
                 {product.sale && <span className="rounded-md bg-red-50 px-2 py-0.5 text-sm font-bold text-red-700">Sale price</span>}
               </div>
+              )}
               {!own && <p className="mt-1 text-xs text-muted">Price may change on {product.platform}. Check the final price there.</p>}
               {(product.saleTag || (own && product.lowStock) || product.multiBuy) && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -150,6 +155,8 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
                 </div>
               )}
             </div>
+
+            {hasSizes && <OptionPicker />}
 
             {product.variants && product.variants.length > 1 && <VariantOptions variants={product.variants} currentSlug={product.slug} />}
 
@@ -170,6 +177,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
           </div>
         </div>
       </div>
+      </OptionsProvider>
 
       <nav aria-label="On this page" className="no-scrollbar -mt-2 flex gap-2 overflow-x-auto text-sm">
         {[["#about", "About this item"], ["#details", "Product details"], ["#reviews", "Reviews"], ["#questions", "Questions"], ["#related", "Related products"]].map(([href, label]) => (

@@ -10,6 +10,13 @@ test("needs at least one change", () => {
   assert.deepEqual(validateBulkChanges({ dealLabel: "Sale" }), []);
 });
 
+test("a product with size options keeps its prices and stock, but other changes still apply", () => {
+  const sized: BulkRow = { ...own, hasOptions: true };
+  assert.ok(planBulkPatch(sized, { priceChangePercent: -10 }).skipReason?.includes("size options"));
+  assert.ok(planBulkPatch(sized, { stock: 5 }).skipReason);
+  assert.deepEqual(planBulkPatch(sized, { featured: true }).patch, { featured: true });
+});
+
 test("rejects contradictory options", () => {
   assert.ok(validateBulkChanges({ pricePaise: 100, priceChangePercent: -10 }).length);
   assert.ok(validateBulkChanges({ mrpPaise: 100, clearMrp: true }).length);

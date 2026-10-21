@@ -2,14 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useCart } from "@/lib/cart";
+import { useCart, cartKey } from "@/lib/cart";
 import { API_URL, type Product } from "@/lib/api";
 import { Money } from "@/lib/currency";
 import { useCheckoutGate } from "./LoginPrompt";
 import { NotifyMe } from "./NotifyMe";
+import { useOptionText, useSelectedOption } from "./ProductOptions";
 
-export function PurchaseActions({ product }: { product: Product }) {
+export function PurchaseActions({ product: shown }: { product: Product }) {
   const cart = useCart();
+  const option = useSelectedOption();
+  const optionText = useOptionText();
+  // With sizes, what can be bought (and for how much) is the chosen size's.
+  const product = option ? { ...shown, pricePaise: option.pricePaise, inStock: option.inStock } : shown;
   const gate = useCheckoutGate();
   const [added, setAdded] = useState(false);
   const inline = useRef<HTMLDivElement>(null);
@@ -30,9 +35,12 @@ export function PurchaseActions({ product }: { product: Product }) {
     name: product.name,
     image: product.images[0]?.url ?? null,
     pricePaise: product.pricePaise,
+    optionId: option?.id,
+    optionLabel: option?.label,
+    optionText: optionText || undefined,
   });
   const buyNow = () => {
-    if (!cart.lines.some((l) => l.productId === product.id)) addLine();
+    if (!cart.lines.some((l) => cartKey(l) === cartKey({ productId: product.id, optionId: option?.id }))) addLine();
     gate.go();
   };
 

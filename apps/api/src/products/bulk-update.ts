@@ -20,7 +20,7 @@ export interface BulkChanges {
   freeDelivery?: boolean;
 }
 
-export interface BulkRow { productType: "OWN" | "AFFILIATE"; pricePaise: number; mrpPaise: number | null }
+export interface BulkRow { productType: "OWN" | "AFFILIATE"; pricePaise: number; mrpPaise: number | null; hasOptions?: boolean }
 
 export interface BulkPlan {
   patch: Prisma.ProductUpdateInput;
@@ -44,6 +44,10 @@ export function validateBulkChanges(c: BulkChanges): string[] {
 }
 
 export function planBulkPatch(row: BulkRow, c: BulkChanges): BulkPlan {
+  // Their price and stock belong to each option, which a bulk edit cannot reach.
+  if (row.hasOptions && (c.pricePaise !== undefined || c.priceChangePercent !== undefined || c.mrpPaise !== undefined || c.clearMrp || c.mrpFromOldPrice || c.stock !== undefined)) {
+    return { patch: {}, skipReason: "This product has size options; change their prices and stock on the product page" };
+  }
   const patch: Prisma.ProductUpdateInput = {};
   const own = row.productType === "OWN";
 

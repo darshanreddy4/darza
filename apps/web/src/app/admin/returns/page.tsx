@@ -10,7 +10,7 @@ import { Select } from "@/components/Select";
 interface ReturnRow {
   id: string; status: "REQUESTED" | "APPROVED" | "REJECTED" | "REFUNDED"; reason: string; details: string | null; adminNote: string | null; createdAt: string;
   user: { name: string; email: string | null; phone: string | null };
-  items: { id: string; orderItemId: string; quantity: number; orderItem: { pricePaise: number; product: { name: string } } }[];
+  items: { id: string; orderItemId: string; quantity: number; orderItem: { pricePaise: number; optionLabel: string | null; product: { name: string } } }[];
   refundPreviewPaise: number; refundPaise: number | null;
   payoutUpi: string | null; payoutRef: string | null; paidOutAt: string | null; payoutDue: boolean;
   order: { id: string; status: string; totalPaise: number; paymentMethod: string; refundedPaise: number };
@@ -73,7 +73,7 @@ export default function ReturnsPage() {
                     <span className="flex gap-2">{r.payoutDue && <Badge tone="amber">Payout due</Badge>}{r.paidOutAt && <Badge tone="green">Paid out</Badge>}<Badge tone={TONE[r.status]}>{LABEL[r.status]}</Badge></span>
                   </div>
                   <p><span className="font-medium">{r.reason}</span>{r.details && <span className="text-muted"> · {r.details}</span>}</p>
-                  <ul className="text-xs text-muted">{r.items.map((i) => <li key={i.id}>{i.orderItem.product.name} × {i.quantity} · {formatPrice(i.orderItem.pricePaise * i.quantity)}</li>)}</ul>
+                  <ul className="text-xs text-muted">{r.items.map((i) => <li key={i.id}>{i.orderItem.product.name}{i.orderItem.optionLabel ? ` (${i.orderItem.optionLabel})` : ""} × {i.quantity} · {formatPrice(i.orderItem.pricePaise * i.quantity)}</li>)}</ul>
                   <p className="text-xs text-muted">Order total {formatPrice(r.order.totalPaise)} · {r.order.paymentMethod === "ONLINE" ? "paid online" : "pay on delivery"} · {r.status === "REFUNDED" ? `refunded ${formatPrice(r.refundPaise ?? 0)}` : `refund would be ${formatPrice(r.refundPreviewPaise)}`} · requested {new Date(r.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</p>
                   {r.adminNote && <p className="rounded-lg bg-canvas px-3 py-2 text-xs">Note sent to customer: {r.adminNote}</p>}
                   {r.paidOutAt && <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">Paid to {r.payoutUpi ?? "the customer"} on {new Date(r.paidOutAt).toLocaleDateString("en-IN", { dateStyle: "medium" })} · reference {r.payoutRef}</p>}

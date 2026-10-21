@@ -3,6 +3,7 @@ import { Prisma, ReturnStatus } from "@prisma/client";
 import { MailService } from "../mail/mail.service";
 import { returnMail, type ReturnMailKind } from "../mail/return-mail";
 import { PrismaService } from "../prisma.service";
+import { itemName, restock } from "../products/stock";
 import { SiteService } from "../site/site.module";
 import { SmsService } from "../sms/sms.service";
 import { SettingsService } from "../store/settings.service";
@@ -30,7 +31,7 @@ export class ReturnsService {
         const pending = new Map<string, number>();
         for (const r of order.returns) for (const i of r.items) pending.set(i.orderItemId, (pending.get(i.orderItemId) ?? 0) + i.quantity);
         const lines = order.items.map((i) => ({ id: i.id, quantity: i.quantity, returnedQty: i.returnedQty, pendingQty: pending.get(i.id) ?? 0, returnDays: i.returnDays }));
-        const names = new Map(order.items.map((i) => [i.id, i.product.name]));
+        const names = new Map(order.items.map((i) => [i.id, itemName(i.product.name, i.optionLabel)]));
         const check = canRequestReturn(order, returnWindowDays, lines);
         if (!check.ok) throw new BadRequestException(check.reason);
         // Cash on delivery has no payment method to send money back to, so we need somewhere to pay it.
@@ -65,7 +66,7 @@ export class ReturnsService {
       where: status ? { status } : undefined,
       include: {
         user: { select: { name: true, email: true, phone: true } },
-        items: { include: { orderItem: { select: { id: true, pricePaise: true, product: { select: { name: true } } } } } },
+        items: { include: { orderItem: { select: { id: true, pricePaise: true, optionLabel: true, product: { select: { name: true } } } } } },
         order: { select: { id: true, status: true, totalPaise: true, discountPaise: true, shippingPaise: true, paymentMethod: true, refundedPaise: true, deliveredAt: true, items: { select: { id: true, quantity: true, pricePaise: true, returnedQty: true } }, returns: { where: { status: "REFUNDED" }, select: { refundPaise: true } } } },
       },
       orderBy: { createdAt: "desc" },
@@ -115,7 +116,7 @@ export class ReturnsService {
       for (const i of req.items) {
         const item = order.items.find((x) => x.id === i.orderItemId)!;
         await tx.orderItem.update({ where: { id: item.id }, data: { returnedQty: { increment: i.quantity } } });
-        await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: i.quantity } } });
+        await restock(tx, item, i.quantity);
       }
       if (completesOrder) await tx.order.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
       return tx.returnRequest.update({ where: { id: req.id }, data: { status: "REFUNDED", refundPaise: totalPaise, adminNote: note ?? req.adminNote, resolvedAt: new Date() } });

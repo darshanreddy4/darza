@@ -7,6 +7,8 @@ import { RETURN_REASONS, UPI_PATTERN, type ReturnAction } from "./returns";
 
 export class OrderItemDto {
   @IsString() productId!: string;
+  // The size or weight chosen, for a product that has options.
+  @IsOptional() @IsString() @MaxLength(40) optionId?: string;
   @IsInt() @Min(1) @Max(99) quantity!: number;
 }
 

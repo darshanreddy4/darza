@@ -14,6 +14,7 @@ import { publicCardFields, publicExtraFields, SOLD_ORDER_STATUSES } from "./card
 import { productReturnDays } from "./return-policy";
 import { activeSale, validateSale } from "./sale";
 import { planBulkPatch, validateBulkChanges } from "./bulk-update";
+import { publicOptions, shapeOptions, summariseOptions } from "./product-options";
 import type { BulkUpdateProductsDto } from "./bulk-update.dto";
 
 export interface ListQuery {
@@ -25,7 +26,7 @@ export interface ListQuery {
   limit: number;
 }
 
-export const withImages = { images: { orderBy: { position: "asc" } } } satisfies Prisma.ProductInclude;
+export const withImages = { images: { orderBy: { position: "asc" } }, options: { orderBy: { position: "asc" } } } satisfies Prisma.ProductInclude;
 export type ProductWithImages = Prisma.ProductGetPayload<{ include: typeof withImages }>;
 type Rating = { avg: number; count: number };
 
@@ -34,11 +35,13 @@ const PUBLIC_TTL = 30;
 
 // Hides the raw affiliate URL (clicks go through /go/:slug), SKU, cost and exact stock.
 function toPublic(p: ProductWithImages, rating: Rating | undefined, brand: string, lowStockThreshold: number, unitsSold: number, storeReturnDays: number) {
-  const { sku, stock, affiliateUrl, status, costPaise, multiBuyQty, multiBuyPercent, showSold, salePricePaise, saleEndsAt, ...rest } = p;
+  const { sku, stock, affiliateUrl, status, costPaise, multiBuyQty, multiBuyPercent, showSold, salePricePaise, saleEndsAt, options, ...rest } = p;
   const sale = activeSale(p);
   // Our own products are sold under the brand name unless the admin typed another seller.
   return applyBrand({
     ...rest,
+    // Sizes or weights to choose from: no cost or exact stock. The product's own price is the lowest of them.
+    options: publicOptions(options),
     // While a sale runs the sale price is the price, and the normal price is shown struck through when there is no MRP.
     pricePaise: sale ? sale.pricePaise : p.pricePaise,
     mrpPaise: p.mrpPaise ?? (sale ? p.pricePaise : null),
@@ -247,7 +250,7 @@ export class ProductsService {
   async create(dto: ProductDto) {
     const data = this.normalise(dto);
     try {
-      const created = await this.prisma.product.create({ data, include: withImages });
+      const created = await this.prisma.product.create({ data: { ...data, options: { create: this.optionRows(dto) } }, include: withImages });
       await this.search.sync(created.id);
       await this.cache.invalidate();
       return created;
@@ -256,14 +259,21 @@ export class ProductsService {
     }
   }
 
-  async update(id: string, dto: ProductDto) {
-    await this.getAdmin(id);
+  async update(id: string, input: ProductDto) {
+    const existing = await this.getAdmin(id);
+    // Edits that don't mention options (a quick publish toggle, a CSV import) keep the ones the product has.
+    const dto = input.options === undefined && existing.options.length
+      ? { ...input, optionNames: existing.optionNames, options: existing.options.map((o) => ({ id: o.id, label: o.label, values: o.values, imageUrl: o.imageUrl ?? undefined, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise ?? undefined, stock: o.stock, costPaise: o.costPaise ?? undefined })) } as ProductDto
+      : input;
     const { images, ...data } = this.normalise(dto);
     try {
-      const updated = await this.prisma.product.update({
-        where: { id },
-        data: { ...data, images: { deleteMany: {}, create: images.create } },
-        include: withImages,
+      const updated = await this.prisma.$transaction(async (tx) => {
+        await this.syncOptions(tx, id, existing.options.map((o) => o.id), this.optionRows(dto, existing.options.map((o) => o.id)));
+        return tx.product.update({
+          where: { id },
+          data: { ...data, images: { deleteMany: {}, create: images.create } },
+          include: withImages,
+        });
       });
       await this.search.sync(id);
       await this.cache.invalidate();
@@ -273,14 +283,34 @@ export class ProductsService {
     }
   }
 
+  // The options as stored; an id the product doesn't have is treated as a new option.
+  private optionRows(dto: ProductDto, knownIds: string[] = []) {
+    if (dto.productType === "AFFILIATE") return [];
+    return shapeOptions(dto.optionNames, dto.options ?? []).options.map((o, position) => ({
+      id: o.id && knownIds.includes(o.id) ? o.id : undefined,
+      label: o.label, values: o.values, imageUrl: o.imageUrl, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise, stock: o.stock, costPaise: o.costPaise, position,
+    }));
+  }
+
+  // Existing options are updated in place (carts and orders point at their ids), missing ones removed, new ones added.
+  private async syncOptions(tx: Prisma.TransactionClient, productId: string, currentIds: string[], rows: ReturnType<ProductsService["optionRows"]>) {
+    const keep = new Set(rows.map((r) => r.id).filter((x): x is string => !!x));
+    const gone = currentIds.filter((id) => !keep.has(id));
+    if (gone.length) await tx.productOption.deleteMany({ where: { id: { in: gone } } });
+    for (const { id, ...row } of rows) {
+      if (id) await tx.productOption.update({ where: { id }, data: row });
+      else await tx.productOption.create({ data: { ...row, productId } });
+    }
+  }
+
   // Applies one change to many products at once; all updates commit together or not at all.
   async bulkUpdate(dto: BulkUpdateProductsDto) {
     const problems = validateBulkChanges(dto.changes);
     if (problems.length) throw new BadRequestException(problems);
 
     const ids = [...new Set(dto.ids)];
-    const rows = await this.prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, productType: true, pricePaise: true, mrpPaise: true } });
-    const plans = rows.map((row) => ({ row, ...planBulkPatch(row, dto.changes) }));
+    const rows = await this.prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, productType: true, pricePaise: true, mrpPaise: true, _count: { select: { options: true } } } });
+    const plans = rows.map((row) => ({ row, ...planBulkPatch({ ...row, hasOptions: row._count.options > 0 }, dto.changes) }));
     const toUpdate = plans.filter((p) => !p.skipReason && Object.keys(p.patch).length > 0);
 
     // Before/after prices for the first few products, so the admin can sanity-check a bulk price change.
@@ -337,9 +367,18 @@ export class ProductsService {
   // Checks a product against the business rules and turns it into what the database stores; throws when it is not valid.
   normalise(dto: ProductDto) {
     const isAffiliate = dto.productType === "AFFILIATE";
-    const saleEndsAt = !isAffiliate && dto.saleEndsAt ? new Date(dto.saleEndsAt) : null;
-    const salePricePaise = !isAffiliate ? dto.salePricePaise ?? null : null;
-    const problems = [...validateProductRules(dto), ...validateSale({ pricePaise: dto.pricePaise, salePricePaise, saleEndsAt })];
+    const shaped = isAffiliate ? { names: [] as string[], options: [], errors: [] as string[] } : shapeOptions(dto.optionNames, dto.options ?? []);
+    const options = shaped.options;
+    // With options the product shows the lowest option price and the total stock.
+    const derived = options.length ? summariseOptions(options) : null;
+    const pricePaise = derived?.pricePaise ?? dto.pricePaise;
+    const mrpPaise = derived ? derived.mrpPaise : dto.mrpPaise ?? null;
+    const stock = derived?.stock ?? dto.stock;
+    const saleEndsAt = !isAffiliate && !derived && dto.saleEndsAt ? new Date(dto.saleEndsAt) : null;
+    const salePricePaise = !isAffiliate && !derived ? dto.salePricePaise ?? null : null;
+    const problems = [...validateProductRules({ ...dto, pricePaise, mrpPaise, stock }), ...validateSale({ pricePaise, salePricePaise, saleEndsAt }), ...shaped.errors];
+    if (isAffiliate && dto.options?.length) problems.push("Only products sold by the store can have options");
+    if (derived && dto.salePricePaise != null) problems.push("A timed sale can't be used on a product with options");
     if (dto.chargeDelivery && dto.freeDelivery) problems.push("A product cannot have free delivery and a delivery charge at once");
     if (problems.length) throw new BadRequestException(problems);
     const videoUrls = [...new Set(dto.videoUrls ?? [])];
@@ -355,8 +394,8 @@ export class ProductsService {
       productType: dto.productType,
       status: dto.status ?? "DRAFT",
       featured: dto.featured ?? false,
-      pricePaise: dto.pricePaise,
-      mrpPaise: dto.mrpPaise ?? null,
+      pricePaise,
+      mrpPaise,
       sellerName: isAffiliate ? (dto.sellerName?.trim() && dto.sellerName !== "DMG" ? dto.sellerName : dto.platform!) : dto.sellerName?.trim() ?? "",
       deliveryInfo: dto.deliveryInfo ?? null,
       returnPolicy: dto.returnPolicy ?? null,
@@ -382,7 +421,8 @@ export class ProductsService {
       warranty: dto.warranty?.trim() || null,
       manufacturerInfo: dto.manufacturerInfo?.trim() || null,
       sku: isAffiliate ? null : dto.sku,
-      stock: isAffiliate ? null : dto.stock,
+      stock: isAffiliate ? null : stock,
+      optionNames: shaped.names,
       costPaise: isAffiliate ? null : dto.costPaise ?? null,
       platform: isAffiliate ? dto.platform : null,
       affiliateUrl: isAffiliate ? dto.affiliateUrl : null,
@@ -395,7 +435,7 @@ export class ProductsService {
 
   private mapDbError(e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
-      if (e.code === "P2002") return new ConflictException("Slug or SKU already exists");
+      if (e.code === "P2002") return new ConflictException(String(e.meta?.target ?? "").includes("label") ? "Two options have the same name" : "Slug or SKU already exists");
       if (e.code === "P2025") return new NotFoundException();
       if (e.code === "P2003" || e.code === "P2018") return new BadRequestException("Invalid category");
     }

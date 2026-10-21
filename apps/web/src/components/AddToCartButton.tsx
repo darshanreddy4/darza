@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useCart } from "@/lib/cart";
 import type { Product } from "@/lib/api";
 
@@ -9,6 +10,11 @@ export function AddToCartButton({ product }: { product: Product }) {
   const cart = useCart();
   const [added, setAdded] = useState(false);
   const out = product.inStock === false;
+
+  // An option has to be chosen first, which happens on the product page.
+  if ((product.options?.length ?? 0) > 0 && !out) {
+    return <Link href={`/products/${product.slug}`} className="relative z-10 mt-1 block w-full rounded-full bg-gold px-4 py-2 text-center text-sm font-semibold text-ink transition hover:bg-gold-600">Select options</Link>;
+  }
 
   return (
     <button

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type Tou
 import { imgSet, imgSized, imgSrc, type ProductImage } from "@/lib/api";
 import { parseVideo, type VideoInfo } from "@/lib/video";
 import { ImageFallback } from "./ProductCard";
+import { useSelectedOption } from "./ProductOptions";
 
 type Item = { type: "image"; src: string; url: string; alt: string } | { type: "video"; video: VideoInfo; label: string };
 
@@ -46,6 +47,14 @@ export function ProductGallery({ images, videoUrls, name }: { images: ProductIma
   }, [images, videoUrls, name]);
 
   const [index, setIndex] = useState(0);
+  // Choosing a version with its own picture (a colour) shows that picture.
+  const optionImage = useSelectedOption()?.imageUrl;
+  const [shownFor, setShownFor] = useState(optionImage);
+  if (shownFor !== optionImage) {
+    setShownFor(optionImage);
+    const at = optionImage ? items.findIndex((it) => it.type === "image" && it.url === optionImage) : -1;
+    if (at >= 0) setIndex(at);
+  }
   const [zoom, setZoom] = useState(false);
   const [touchX, setTouchX] = useState<number | null>(null);
   const count = items.length;

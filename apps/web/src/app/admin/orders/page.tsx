@@ -13,7 +13,7 @@ interface Order {
   subtotalPaise: number; discountPaise: number; rewardDiscountPaise: number; shippingPaise: number; couponCode: string | null; gifts: string[]; refundId: string | null; whatsappOptIn?: boolean; refundedPaise: number; paymentId: string | null;
   shippingAddr: { name: string; phone: string; line1: string; line2?: string; city: string; state: string; pincode: string };
   user: { name: string; email: string | null; phone: string | null };
-  items: { id: string; quantity: number; pricePaise: number; costPaise: number | null; product: { name: string } }[];
+  items: { id: string; quantity: number; pricePaise: number; costPaise: number | null; optionLabel: string | null; product: { name: string } }[];
 }
 
 const STATUSES = ["PENDING_PAYMENT", "PLACED", "PAID", "SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"];
@@ -83,7 +83,7 @@ export default function OrdersAdminPage() {
                           <div className="grid gap-6 md:grid-cols-2">
                             <div>
                               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Items</h3>
-                              <ul className="space-y-1 text-sm">{o.items.map((i) => <li key={i.id} className="flex justify-between"><span>{i.product.name} × {i.quantity}</span><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>)}</ul>
+                              <ul className="space-y-1 text-sm">{o.items.map((i) => <li key={i.id} className="flex justify-between"><span>{i.product.name}{i.optionLabel ? ` (${i.optionLabel})` : ""} × {i.quantity}</span><span>{formatPrice(i.pricePaise * i.quantity)}</span></li>)}</ul>
                               <dl className="mt-2 space-y-1 border-t border-line pt-2 text-xs text-muted">
                                 <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatPrice(o.subtotalPaise)}</dd></div>
                                 {o.rewardDiscountPaise > 0 && <div className="flex justify-between"><dt>Order reward</dt><dd>-{formatPrice(o.rewardDiscountPaise)}</dd></div>}

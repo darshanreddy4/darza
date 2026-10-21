@@ -23,4 +23,8 @@ test("cost is hidden from everyone but admins", () => {
   const row = { name: "Kettle", costPaise: 9000, pricePaise: 19900 };
   assert.deepEqual(withoutCost("STAFF", row), { name: "Kettle", pricePaise: 19900 });
   assert.equal(withoutCost("ADMIN", row).costPaise, 9000);
+  // The cost of each size is hidden as well.
+  const sized = { name: "Rice", options: [{ label: "1 kg", costPaise: 5000, pricePaise: 8000 }] };
+  assert.deepEqual(withoutCost("STAFF", sized), { name: "Rice", options: [{ label: "1 kg", pricePaise: 8000 }] });
+  assert.equal(withoutCost("ADMIN", sized).options[0].costPaise, 5000);
 });

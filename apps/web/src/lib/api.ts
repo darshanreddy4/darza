@@ -2,6 +2,8 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000
 
 export interface ProductImage { id: string; url: string; alt: string | null }
 export interface ProductVariant { slug: string; colorName: string | null; packSize: string | null; image: string | null; inStock: boolean | null }
+// One version of a product (Black / L, 20W, 5000 mAh) with its own price; pricePaise on the product is the lowest of these.
+export interface ProductOption { id: string; label: string; values: string[]; imageUrl: string | null; pricePaise: number; mrpPaise: number | null; inStock: boolean }
 export interface Product {
   id: string;
   name: string;
@@ -49,6 +51,9 @@ export interface Product {
   manufacturerInfo: string | null;
   // Other products in the same variant group (only on the product page); empty when there are none.
   variants?: ProductVariant[];
+  // What the shopper chooses between, named by the admin ("Colour", "Size"), and the versions to choose from.
+  optionNames?: string[];
+  options?: ProductOption[];
   category?: { name: string; slug: string; parent?: { name: string; slug: string } | null };
 }
 export interface Category { id: string; name: string; slug: string; parentId: string | null; productCount: number }

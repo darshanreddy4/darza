@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { API_URL, formatPrice } from "@/lib/api";
 import { Money } from "@/lib/currency";
 import { useAuth } from "@/lib/auth";
-import { useCart } from "@/lib/cart";
+import { useCart, cartKey } from "@/lib/cart";
 import { useBrand } from "@/components/BrandProvider";
 import { useCouponCode, useQuote } from "@/lib/quote";
 import { IN_STATES } from "@/lib/states";
@@ -92,7 +92,7 @@ export default function CheckoutPage() {
     try {
       const res = await fetch(`${API_URL}/orders`, {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })), shipping, paymentMethod: method, couponCode: coupon || undefined, whatsappUpdates: whatsappOffered && whatsapp }),
+        body: JSON.stringify({ items: lines.map((l) => ({ productId: l.productId, optionId: l.optionId, quantity: l.quantity })), shipping, paymentMethod: method, couponCode: coupon || undefined, whatsappUpdates: whatsappOffered && whatsapp }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error([body?.message].flat().filter(Boolean).join(", ") || "Could not place your order");
@@ -174,7 +174,7 @@ export default function CheckoutPage() {
         <aside className="h-fit space-y-4 rounded-3xl border border-line bg-white p-7 shadow-card lg:sticky lg:top-40">
           <h2 className="text-lg font-bold">Order summary</h2>
           <ul className="space-y-2 text-sm">
-            {lines.map((l) => { const unit = quote?.lines.find((q) => q.productId === l.productId)?.unitPaise ?? l.pricePaise; return <li key={l.productId} className="flex justify-between gap-3"><span className="truncate">{l.name} × {l.quantity}{quote?.lines.find((q) => q.productId === l.productId)?.returnDays === 0 && <span className="ml-1.5 text-xs font-medium text-amber-800">(no returns)</span>}</span><span><Money paise={unit * l.quantity} /></span></li>; })}
+            {lines.map((l) => { const priced = quote?.lines.find((q) => q.productId === l.productId && (q.optionId ?? null) === (l.optionId ?? null)); const unit = priced?.unitPaise ?? l.pricePaise; return <li key={cartKey(l)} className="flex justify-between gap-3"><span className="truncate">{l.name}{l.optionLabel ? ` (${l.optionLabel})` : ""} × {l.quantity}{priced?.returnDays === 0 && <span className="ml-1.5 text-xs font-medium text-amber-800">(no returns)</span>}</span><span><Money paise={unit * l.quantity} /></span></li>; })}
           </ul>
           <CouponBox code={coupon} setCode={setCoupon} quote={quote} />
           <OfferList quote={quote} setCode={setCoupon} />

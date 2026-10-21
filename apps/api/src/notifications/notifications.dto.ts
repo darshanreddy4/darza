@@ -1,8 +1,9 @@
 import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
 
 export class CartItemDto {
   @IsString() @MaxLength(40) productId!: string;
+  @IsOptional() @IsString() @MaxLength(40) optionId?: string;
   @IsInt() @Min(1) @Max(99) quantity!: number;
 }
 

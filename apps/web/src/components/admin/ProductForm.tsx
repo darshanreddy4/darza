@@ -13,6 +13,12 @@ import { msUntil } from "@/lib/labels";
 import { PACK_KINDS, PACK_UNITS, formatPack, parsePack, type PackKind } from "@/lib/packSize";
 
 type Row = { k: string; v: string };
+// One version to buy (Black / L, 20W, 5000 mAh), typed in rupees; id is set for an option that already exists, image is one of the product's pictures.
+type OptRow = { id?: string; values: [string, string]; price: string; mrp: string; stock: string; cost: string; image: string };
+
+// Only suggestions: the admin can name what the customer chooses anything.
+const KIND_HINTS = ["Size", "Colour", "Capacity", "Wattage", "Storage", "Battery", "Weight", "Pack of"];
+const splitList = (text: string) => [...new Set(text.split(/[,\n]/).map((s) => s.trim()).filter(Boolean))];
 
 const PLATFORMS = ["Amazon", "Flipkart", "Myntra", "Meesho", "Nykaa", "Other"];
 const toRupees = (paise: number | null | undefined) => (paise == null ? "" : String(paise / 100));
@@ -74,6 +80,9 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const [variantGroup, setVariantGroup] = useState(initial?.variantGroup ?? "");
   const [colorName, setColorName] = useState(initial?.colorName ?? "");
   const [warranty, setWarranty] = useState(initial?.warranty ?? "");
+  const [optionNames, setOptionNames] = useState<[string, string]>([initial?.optionNames?.[0] ?? "", initial?.optionNames?.[1] ?? ""]);
+  const [options, setOptions] = useState<OptRow[]>((initial?.options ?? []).map((o) => ({ id: o.id, values: [o.values[0] ?? o.label, o.values[1] ?? ""], price: toRupees(o.pricePaise), mrp: toRupees(o.mrpPaise), stock: String(o.stock), cost: toRupees(o.costPaise), image: o.imageUrl ?? "" })));
+  const [listed, setListed] = useState<[string, string]>(["", ""]);
   const [manufacturerInfo, setManufacturerInfo] = useState(initial?.manufacturerInfo ?? "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -82,15 +91,60 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const tree = buildCategoryTree(categories);
   const effectiveCategory = categoryId || tree[0]?.children[0]?.id || tree[0]?.id || "";
   const own = type === "OWN";
+  const sized = own && options.length > 0;
+  // What the customer chooses between: one or two kinds, named by the admin.
+  const kinds = optionNames[0].trim() ? (optionNames[1].trim() ? [optionNames[0].trim(), optionNames[1].trim()] : [optionNames[0].trim()]) : [];
+  const setOption = (i: number, patch: Partial<OptRow>) => setOptions(options.map((o, j) => (j === i ? { ...o, ...patch } : o)));
+  const setValue = (i: number, k: number, v: string) => setOption(i, { values: k === 0 ? [v, options[i].values[1]] : [options[i].values[0], v] });
+  const blank = { price: "", mrp: "", stock: "", cost: "", image: "" };
+  // The first option starts from the price and stock already typed above.
+  const addOption = () => setOptions([...options, { values: ["", ""], ...(options.length === 0 ? { price, mrp, stock, cost, image: "" } : blank) }]);
+  // Removing the last option leaves its values in the single price fields instead of stale ones.
+  const removeOption = (i: number) => {
+    const left = options.filter((_, j) => j !== i);
+    if (left.length === 0) { const o = options[i]; setPrice(o.price); setMrp(o.mrp); setStock(o.stock); setCost(o.cost); setOptionNames(["", ""]); }
+    setOptions(left);
+  };
+  // Names a kind from the suggestions: the first empty slot, never twice.
+  const nameKind = (n: string) => {
+    if (optionNames.some((x) => x.trim().toLowerCase() === n.toLowerCase())) return;
+    if (!optionNames[0].trim()) setOptionNames([n, optionNames[1]]);
+    else if (!optionNames[1].trim()) setOptionNames([optionNames[0], n]);
+  };
+  // "S, M, L" (and a second list) become one row for every combination, keeping rows already there.
+  const createRows = () => {
+    const a = splitList(listed[0]);
+    const b = kinds.length > 1 ? splitList(listed[1]) : [""];
+    if (a.length === 0 || b.length === 0) return;
+    const have = new Set(options.map((o) => `${o.values[0].toLowerCase()}|${o.values[1].toLowerCase()}`));
+    const fresh = a.flatMap((x) => b.map((y) => ({ values: [x, y] as [string, string], ...blank, price, mrp, stock: "0", cost }))).filter((r) => !have.has(`${r.values[0].toLowerCase()}|${r.values[1].toLowerCase()}`));
+    setOptions([...options.filter((o) => o.values[0] || o.values[1] || o.price || o.stock), ...fresh]);
+    setListed(["", ""]);
+  };
+  const cheapest = sized ? options.reduce((best, o) => (Number(o.price) < Number(best.price) ? o : best), options[0]) : null;
+  const totalStock = options.reduce((n, o) => n + (Number(o.stock) || 0), 0);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    const pricePaise = Math.round(Number(price) * 100);
+    if (sized && kinds.length === 0) return setError("Name what the customer chooses between, like Size or Colour");
+    const optionRows = sized ? options.map((o) => ({
+      id: o.id, values: kinds.map((_, k) => o.values[k].trim()), pricePaise: Math.round(Number(o.price) * 100), mrpPaise: o.mrp ? Math.round(Number(o.mrp) * 100) : undefined,
+      stock: Math.round(Number(o.stock || 0)), costPaise: o.cost ? Math.round(Number(o.cost) * 100) : undefined, imageUrl: o.image || undefined,
+    })) : [];
+    for (const [n, o] of optionRows.entries()) {
+      const name = o.values.join(" / ");
+      if (o.values.some((v) => !v)) return setError(`Every option needs a ${kinds.join(" and a ")}`);
+      if (!options[n].price.trim() || !Number.isFinite(o.pricePaise) || o.pricePaise < 0) return setError(`Enter a valid price for ${name}`);
+      if (!Number.isFinite(o.stock) || o.stock < 0) return setError(`Enter a valid stock for ${name}`);
+      if (o.mrpPaise !== undefined && o.mrpPaise < o.pricePaise) return setError(`The MRP of ${name} cannot be lower than its price`);
+    }
+    if (new Set(optionRows.map((o) => o.values.join(" / ").toLowerCase())).size !== optionRows.length) return setError("Two options are the same");
+    const pricePaise = sized ? Math.min(...optionRows.map((o) => o.pricePaise)) : Math.round(Number(price) * 100);
     if (!Number.isFinite(pricePaise) || pricePaise < 0) return setError("Enter a valid price");
     if (!effectiveCategory) return setError("Create a category first");
     if (own && chargeMode === "charge" && chargeFee && (!Number.isFinite(Number(chargeFee)) || Number(chargeFee) < 0)) return setError("Enter a valid delivery charge");
-    const sale = own && saleOn ? { salePricePaise: Math.round(Number(salePrice) * 100), saleEndsAt: toIso(saleEndsAt) } : null;
+    const sale = own && saleOn && !sized ? { salePricePaise: Math.round(Number(salePrice) * 100), saleEndsAt: toIso(saleEndsAt) } : null;
     if (sale) {
       if (!salePrice || !Number.isFinite(sale.salePricePaise) || sale.salePricePaise < 0) return setError("Enter the sale price");
       if (sale.salePricePaise >= pricePaise) return setError("The sale price must be lower than the selling price");
@@ -113,7 +167,8 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
       highlights: highlights.split("\n").map((h) => h.trim()).filter(Boolean),
       ...(own
         ? {
-            sku: sku.trim(), stock: Number(stock || 0), costPaise: cost ? Math.round(Number(cost) * 100) : undefined,
+            sku: sku.trim(), stock: sized ? totalStock : Number(stock || 0), costPaise: !sized && cost ? Math.round(Number(cost) * 100) : undefined,
+            options: optionRows, optionNames: sized ? kinds : [],
             returnDays: returnMode === "none" ? 0 : returnMode === "days" ? Math.max(1, Math.min(90, Math.round(Number(returnDays) || 7))) : undefined,
             showAddToCart, showSold, freeDelivery: chargeMode === "free", chargeDelivery: chargeMode === "charge", deliveryFeePaise: chargeMode === "charge" && chargeFee ? Math.round(Number(chargeFee) * 100) : undefined,
             deliveryDays: showDelivery ? Math.max(0, Math.min(30, Math.round(Number(deliveryDays) || 0))) : undefined,
@@ -198,11 +253,12 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
           <Card title="Pricing" description="All prices in Indian rupees.">
             <div className="grid gap-4 sm:grid-cols-2">
               <label className={label}>Selling price (₹)
-                <input required type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} mt-1.5`} />
+                <input required type="number" min="0" step="0.01" disabled={sized} value={sized ? cheapest!.price : price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} mt-1.5 disabled:bg-canvas disabled:text-muted`} />
+                {sized && <span className={hint}>Taken from the lowest price in Options and prices below.</span>}
               </label>
               <label className={label}>MRP (₹) <span className="font-normal text-muted">optional</span>
-                <input type="number" min="0" step="0.01" value={mrp} onChange={(e) => setMrp(e.target.value)} className={`${inputCls} mt-1.5`} />
-                <span className={hint}>Shown struck through to display the discount.</span>
+                <input type="number" min="0" step="0.01" disabled={sized} value={sized ? cheapest!.mrp : mrp} onChange={(e) => setMrp(e.target.value)} className={`${inputCls} mt-1.5 disabled:bg-canvas disabled:text-muted`} />
+                <span className={hint}>{sized ? "Each option has its own MRP below." : "Shown struck through to display the discount."}</span>
               </label>
               <label className={label}>GST rate
                 <Select value={gstRate} onChange={(e) => setGstRate(e.target.value)} className={`${inputCls} mt-1.5`}>
@@ -214,6 +270,62 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
           </Card>
 
           {own && (
+            <Card title="Options and prices" description="Optional. For a product that comes in versions: clothes in S, M, L or colours, a charger in 20W or 40W, a phone in 5000 mAh or 7000 mAh, rice in 1 kg or 25 kg. You decide what the customer chooses and name it yourself; each option then has its own price and stock, like on Amazon or Flipkart, instead of a separate product for each."
+              actions={<button type="button" className={btn.secondary} onClick={addOption}>+ Add option</button>}>
+              {options.length === 0 ? <p className="text-sm text-muted">No options. The product is sold at the single price above.</p> : (
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className={label}>What does the customer choose?
+                      <input value={optionNames[0]} maxLength={30} placeholder="Size, Wattage, Battery, Colour…" onChange={(e) => setOptionNames([e.target.value, optionNames[1]])} className={`${inputCls} mt-1.5`} />
+                    </label>
+                    <label className={label}>A second choice <span className="font-normal text-muted">optional</span>
+                      <input value={optionNames[1]} maxLength={30} disabled={!optionNames[0].trim()} placeholder="for example Colour, with Size above" onChange={(e) => setOptionNames([optionNames[0], e.target.value])} className={`${inputCls} mt-1.5 disabled:bg-canvas`} />
+                    </label>
+                    <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted sm:col-span-2">Suggestions:
+                      {KIND_HINTS.map((h) => <button key={h} type="button" onClick={() => nameKind(h)} className="rounded-full border border-line px-2.5 py-1 font-medium text-ink-3 hover:border-ink/40">{h}</button>)}
+                    </p>
+                  </div>
+                  {kinds.length > 0 && (
+                    <div className="rounded-xl bg-canvas p-3">
+                      <p className="text-sm font-medium">Add many at once</p>
+                      <p className={hint}>Type the values separated by commas and one row is made for each{kinds.length > 1 ? " combination" : ""}, for example S, M, L, XL.</p>
+                      <div className="mt-2 flex flex-wrap items-end gap-3">
+                        {kinds.map((k, n) => (
+                          <label key={k} className="min-w-40 flex-1 text-xs font-medium text-muted">{k} values<input value={listed[n]} aria-label={`${k} values to add`} placeholder={n === 0 ? "S, M, L, XL" : "Black, Blue"} onChange={(e) => setListed(n === 0 ? [e.target.value, listed[1]] : [listed[0], e.target.value])} className={`${inputCls} mt-1 text-ink`} /></label>
+                        ))}
+                        <button type="button" className={btn.secondary} onClick={createRows}>Create rows</button>
+                      </div>
+                    </div>
+                  )}
+                  <ul className="space-y-3">
+                    {options.map((o, i) => (
+                      <li key={o.id ?? i} className="flex flex-wrap items-end gap-3 rounded-xl border border-line p-3">
+                        {(kinds.length ? kinds : ["Option"]).map((k, n) => (
+                          <label key={n} className="min-w-28 flex-[1.2] text-xs font-medium text-muted">{k}<input value={o.values[n]} maxLength={40} aria-label={`Option ${i + 1} ${k}`} onChange={(e) => setValue(i, n, e.target.value)} className={`${inputCls} mt-1 text-ink`} /></label>
+                        ))}
+                        <label className="min-w-24 flex-1 text-xs font-medium text-muted">Price (₹)<input type="number" min="0" step="0.01" value={o.price} aria-label={`Option ${i + 1} price`} onChange={(e) => setOption(i, { price: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
+                        <label className="min-w-24 flex-1 text-xs font-medium text-muted">MRP (₹)<input type="number" min="0" step="0.01" value={o.mrp} aria-label={`Option ${i + 1} MRP`} onChange={(e) => setOption(i, { mrp: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
+                        <label className="min-w-20 flex-[0.8] text-xs font-medium text-muted">Stock<input type="number" min="0" step="1" value={o.stock} aria-label={`Option ${i + 1} stock`} onChange={(e) => setOption(i, { stock: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
+                        <label className="min-w-24 flex-1 text-xs font-medium text-muted">Cost (₹)<input type="number" min="0" step="0.01" value={o.cost} aria-label={`Option ${i + 1} cost`} onChange={(e) => setOption(i, { cost: e.target.value })} className={`${inputCls} mt-1 text-ink`} /></label>
+                        {images.length > 0 && (
+                          <label className="min-w-28 flex-1 text-xs font-medium text-muted">Picture
+                            <Select aria-label={`Option ${i + 1} picture`} value={o.image} onChange={(e) => setOption(i, { image: e.target.value })} className={`${inputCls} mt-1 text-ink`}>
+                              <option value="">Product picture</option>
+                              {images.filter(Boolean).map((u, n) => <option key={u} value={u}>Image {n + 1}</option>)}
+                            </Select>
+                          </label>
+                        )}
+                        <button type="button" className={btn.danger} onClick={() => removeOption(i)} aria-label={`Remove option ${i + 1}`}>✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className={hint}>The product page shows the lowest price as the starting price, and stock is counted across all options. Pick a picture from the product&apos;s images and the page switches to it when that option is chosen, which suits colours. Cost is private and used for profit in Analytics. Remove every option to go back to a single price.</p>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {own && !sized && (
             <Card title="Timed sale" description="Optional. Customers see a countdown on the product page, and the price goes back to the selling price by itself when it ends.">
               <div className="space-y-4 text-sm">
                 <label className="flex items-start gap-3">
@@ -240,11 +352,13 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
             <Card title="Inventory & fulfilment">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className={label}>SKU<input required value={sku} onChange={(e) => setSku(e.target.value)} className={`${inputCls} mt-1.5 font-mono`} /></label>
-                <label className={label}>Stock quantity<input required type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} mt-1.5`} /></label>
+                <label className={label}>Stock quantity<input required type="number" min="0" disabled={sized} value={sized ? String(totalStock) : stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} mt-1.5 disabled:bg-canvas disabled:text-muted`} />{sized && <span className={hint}>Total of all options.</span>}</label>
+                {!sized && (
                 <label className={`${label} sm:col-span-2`}>Cost price per unit (₹) <span className="font-normal text-muted">optional</span>
                   <input type="number" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} className={`${inputCls} mt-1.5`} />
                   <span className={hint}>Private. Used to calculate profit in Analytics; orders keep the cost at the time of sale.</span>
                 </label>
+                )}
                 <label className={`${label} sm:col-span-2`}>Delivery information<input value={deliveryInfo} onChange={(e) => setDeliveryInfo(e.target.value)} placeholder="Delivered in 3–5 business days" className={`${inputCls} mt-1.5`} /></label>
                 <label className={`${label} sm:col-span-2`}>Return policy text<input value={returnPolicy} onChange={(e) => setReturnPolicy(e.target.value)} placeholder="7-day replacement for defects" className={`${inputCls} mt-1.5`} /></label>
                 <div className="sm:col-span-2">

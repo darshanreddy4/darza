@@ -16,9 +16,11 @@ export function canDecideReturn(role: Role, action: "approve" | "reject" | "refu
 }
 
 // What the business paid for goods is not for staff to see.
-export function withoutCost<T extends { costPaise?: number | null }>(role: Role, row: T): T {
+export function withoutCost<T extends { costPaise?: number | null; options?: { costPaise?: number | null }[] }>(role: Role, row: T): T {
   if (role === "ADMIN") return row;
   const { costPaise: _cost, ...rest } = row;
   void _cost;
+  // Each size of a product carries its own cost.
+  if (rest.options) rest.options = rest.options.map(({ costPaise: c, ...o }) => { void c; return o; });
   return rest as T;
 }

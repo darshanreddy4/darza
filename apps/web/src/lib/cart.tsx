@@ -2,13 +2,20 @@
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
 
-export interface CartLine { productId: string; slug: string; name: string; image: string | null; pricePaise: number; quantity: number }
+export interface CartLine {
+  productId: string; slug: string; name: string; image: string | null; pricePaise: number; quantity: number;
+  // The option chosen, for a product that comes in several: its label ("Black / L") and a readable line ("Colour: Black, Size: L").
+  optionId?: string; optionLabel?: string; optionText?: string;
+}
+
+// The same product in two sizes is two lines.
+export const cartKey = (l: { productId: string; optionId?: string | null }) => (l.optionId ? `${l.productId}:${l.optionId}` : l.productId);
 
 interface CartCtx {
   lines: CartLine[];
   add: (line: Omit<CartLine, "quantity">) => void;
-  setQuantity: (productId: string, quantity: number) => void;
-  remove: (productId: string) => void;
+  setQuantity: (key: string, quantity: number) => void;
+  remove: (key: string) => void;
   clear: () => void;
   count: number;
   totalPaise: number;
@@ -42,15 +49,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const add = useCallback((l: Omit<CartLine, "quantity">) => {
     const cur = read();
-    write(cur.some((c) => c.productId === l.productId)
-      ? cur.map((c) => (c.productId === l.productId ? { ...c, quantity: Math.min(c.quantity + 1, 99) } : c))
+    write(cur.some((c) => cartKey(c) === cartKey(l))
+      ? cur.map((c) => (cartKey(c) === cartKey(l) ? { ...c, quantity: Math.min(c.quantity + 1, 99) } : c))
       : [...cur, { ...l, quantity: 1 }]);
   }, []);
-  const setQuantity = useCallback((id: string, q: number) => {
+  const setQuantity = useCallback((key: string, q: number) => {
     const cur = read();
-    write(q <= 0 ? cur.filter((c) => c.productId !== id) : cur.map((c) => (c.productId === id ? { ...c, quantity: Math.min(q, 99) } : c)));
+    write(q <= 0 ? cur.filter((c) => cartKey(c) !== key) : cur.map((c) => (cartKey(c) === key ? { ...c, quantity: Math.min(q, 99) } : c)));
   }, []);
-  const remove = useCallback((id: string) => write(read().filter((c) => c.productId !== id)), []);
+  const remove = useCallback((key: string) => write(read().filter((c) => cartKey(c) !== key)), []);
   const clear = useCallback(() => write([]), []);
 
   const value: CartCtx = {

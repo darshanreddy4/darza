@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { JwtPayload } from "../auth/auth.guard";
 import { PrismaService } from "../prisma.service";
+import { itemName } from "../products/stock";
 import { buildInvoice, formatInvoiceNumber } from "../store/invoice";
 import { SiteService } from "../site/site.module";
 import { SettingsService } from "../store/settings.service";
@@ -34,7 +35,7 @@ export class InvoiceService {
     const ship = order.shippingAddr as unknown as ShippingAddr;
     const intraState = order.gstApplied && same(settings.businessState, ship.state);
     const { lines, totals } = buildInvoice({
-      items: order.items.map((i) => ({ name: i.product.name, quantity: i.quantity, unitPaise: i.pricePaise, gstRatePercent: i.gstRatePercent })),
+      items: order.items.map((i) => ({ name: itemName(i.product.name, i.optionLabel), quantity: i.quantity, unitPaise: i.pricePaise, gstRatePercent: i.gstRatePercent })),
       discountPaise: order.discountPaise, shippingPaise: order.shippingPaise, shippingGstPercent: settings.shippingGstPercent,
       gstApplied: order.gstApplied, intraState,
     });

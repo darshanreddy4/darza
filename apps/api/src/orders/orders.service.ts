@@ -14,6 +14,8 @@ import { offerText } from "../store/coupon-rules";
 import { multiBuyOf, priceLine } from "../products/multi-buy";
 import { productReturnDays } from "../products/return-policy";
 import { sellingPrice } from "../products/sale";
+import { chooseOption, lineKey } from "../products/product-options";
+import { itemName, restock } from "../products/stock";
 import { PincodeService } from "../store/pincode.service";
 import { deliveryModeOf, parseGifts, parseZones, priceBasket, rewardDiscountFor, zoneFor } from "../store/delivery";
 import { SettingsService } from "../store/settings.service";
@@ -59,21 +61,33 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   }
   onModuleDestroy() { clearInterval(this.timer); }
 
-  private mergeQuantities(items: { productId: string; quantity: number }[]) {
-    const qty = new Map<string, number>();
-    for (const i of items) qty.set(i.productId, Math.min(99, (qty.get(i.productId) ?? 0) + i.quantity));
-    return qty;
+  // The same product in the same size is one line; different sizes of a product are separate lines.
+  private mergeLines(items: { productId: string; optionId?: string; quantity: number }[]) {
+    const lines = new Map<string, { productId: string; optionId: string | null; quantity: number }>();
+    for (const i of items) {
+      const key = lineKey(i.productId, i.optionId);
+      lines.set(key, { productId: i.productId, optionId: i.optionId ?? null, quantity: Math.min(99, (lines.get(key)?.quantity ?? 0) + i.quantity) });
+    }
+    return [...lines.values()];
   }
 
   // Prices a basket for the cart and checkout. A signed-in customer's code limits are checked here too; the delivery phone number only counts when the order is placed.
   async quote(dto: QuoteDto, userId?: string) {
     const settings = await this.settings.get();
-    const qty = this.mergeQuantities(dto.items);
-    const products = await this.prisma.product.findMany({ where: { id: { in: [...qty.keys()] }, status: "PUBLISHED", productType: "OWN" }, select: { id: true, pricePaise: true, productType: true, multiBuyQty: true, multiBuyPercent: true, salePricePaise: true, saleEndsAt: true, returnDays: true, returnPolicy: true, freeDelivery: true, chargeDelivery: true, deliveryFeePaise: true } });
-    const price = new Map(products.map((p) => [p.id, p.pricePaise]));
+    const wanted = this.mergeLines(dto.items);
+    const products = await this.prisma.product.findMany({ where: { id: { in: [...new Set(wanted.map((w) => w.productId))] }, status: "PUBLISHED", productType: "OWN" }, select: { id: true, pricePaise: true, productType: true, multiBuyQty: true, multiBuyPercent: true, salePricePaise: true, saleEndsAt: true, returnDays: true, returnPolicy: true, freeDelivery: true, chargeDelivery: true, deliveryFeePaise: true, options: { select: { id: true, pricePaise: true } } } });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const unavailable: string[] = [];
     // "Buy N, save extra P%" is already in the unit prices, so the subtotal is what will be charged for the goods.
-    const lines = products.map((p) => ({ productId: p.id, returnDays: productReturnDays(p, settings.returnWindowDays), ...priceLine(sellingPrice(p), qty.get(p.id) ?? 0, multiBuyOf(p)) }));
-    const subtotal = lines.reduce((sum, l) => sum + l.unitPaise * (qty.get(l.productId) ?? 0), 0);
+    const priced = wanted.flatMap((w) => {
+      const p = byId.get(w.productId);
+      const choice = p ? chooseOption(p.options, w.optionId) : null;
+      if (!p || !choice?.ok) { unavailable.push(w.productId); return []; }
+      const line = priceLine(choice.option ? choice.option.pricePaise : sellingPrice(p), w.quantity, multiBuyOf(p));
+      return [{ p, quantity: w.quantity, line: { productId: p.id, optionId: choice.option?.id ?? null, returnDays: productReturnDays(p, settings.returnWindowDays), ...line } }];
+    });
+    const lines = priced.map((x) => x.line);
+    const subtotal = priced.reduce((sum, x) => sum + x.line.unitPaise * x.quantity, 0);
 
     let discount = 0;
     let coupon: { code: string; description: string | null } | null = null;
@@ -89,12 +103,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
     const offers = await this.coupons.offers(userId, afterReward);
     const basket = priceBasket({
-      lines: products.map((p, n) => ({ goodsPaise: lines[n].unitPaise * (qty.get(p.id) ?? 0), mode: deliveryModeOf(p), feePaise: p.deliveryFeePaise })),
+      lines: priced.map((x) => ({ goodsPaise: x.line.unitPaise * x.quantity, mode: deliveryModeOf(x.p), feePaise: x.p.deliveryFeePaise })),
       discountPaise: discount, rules: settings, zone: zoneFor(parseZones(settings.deliveryZones), dto.pincode), gifts: tiers,
       coupons: offers.filter((o) => o.minOrderPaise > 0).map((o) => ({ title: `${offerText(o)} with code ${o.code}`, atPaise: o.minOrderPaise, reached: o.unlocked })),
     });
     return {
-      ...basket, coupon, couponError, offers, unavailable: [...qty.keys()].filter((id) => !price.has(id)),
+      ...basket, coupon, couponError, offers, unavailable,
       multiBuySavedPaise: lines.reduce((n, l) => n + l.savedPaise, 0), lines,
     };
   }
@@ -106,22 +120,35 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     const settings = await this.settings.get();
     const brand = await this.site.brandName();
     await this.pincodes.assertValid(dto.shipping.pincode);
-    const qty = this.mergeQuantities(dto.items);
+    const wanted = this.mergeLines(dto.items);
+    const productIds = [...new Set(wanted.map((w) => w.productId))];
 
     const order = await this.prisma.$transaction(async (tx) => {
-      const products = await tx.product.findMany({ where: { id: { in: [...qty.keys()] } } });
-      if (products.length !== qty.size) throw new BadRequestException("Some products no longer exist");
+      const products = await tx.product.findMany({ where: { id: { in: productIds } }, include: { options: true } });
+      if (products.length !== productIds.length) throw new BadRequestException("Some products no longer exist");
+      const byId = new Map(products.map((p) => [p.id, p]));
 
       let subtotal = 0;
-      const unitPrice = new Map<string, number>();
-      for (const p of products) {
+      const bought: { p: (typeof products)[number]; option: (typeof products)[number]["options"][number] | null; quantity: number; unitPaise: number }[] = [];
+      for (const w of wanted) {
+        const p = byId.get(w.productId)!;
         if (p.productType !== "OWN" || p.status !== "PUBLISHED") throw new BadRequestException(`${p.name} cannot be purchased on ${brand}`);
-        const q = qty.get(p.id)!;
+        const choice = chooseOption(p.options, w.optionId);
+        if (!choice.ok) throw new BadRequestException(choice.reason === "CHOOSE" ? `Choose a size for ${p.name}` : `That size of ${p.name} is no longer available`);
+        const option = choice.option;
+        const q = w.quantity;
+        const name = itemName(p.name, option?.label);
         // Conditional decrement keeps stock from going negative under concurrent orders.
-        const res = await tx.product.updateMany({ where: { id: p.id, stock: { gte: q } }, data: { stock: { decrement: q } } });
-        if (res.count === 0) throw new ConflictException(`Not enough stock for ${p.name}`);
-        const line = priceLine(sellingPrice(p), q, multiBuyOf(p));
-        unitPrice.set(p.id, line.unitPaise);
+        if (option) {
+          const res = await tx.productOption.updateMany({ where: { id: option.id, stock: { gte: q } }, data: { stock: { decrement: q } } });
+          if (res.count === 0) throw new ConflictException(`Not enough stock for ${name}`);
+          await tx.product.update({ where: { id: p.id }, data: { stock: { decrement: q } } });
+        } else {
+          const res = await tx.product.updateMany({ where: { id: p.id, stock: { gte: q } }, data: { stock: { decrement: q } } });
+          if (res.count === 0) throw new ConflictException(`Not enough stock for ${name}`);
+        }
+        const line = priceLine(option ? option.pricePaise : sellingPrice(p), q, multiBuyOf(p));
+        bought.push({ p, option, quantity: q, unitPaise: line.unitPaise });
         subtotal += line.unitPaise * q;
       }
 
@@ -141,7 +168,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         couponCode = found.coupon.code;
       }
       const basket = priceBasket({
-        lines: products.map((p) => ({ goodsPaise: unitPrice.get(p.id)! * qty.get(p.id)!, mode: deliveryModeOf(p), feePaise: p.deliveryFeePaise })),
+        lines: bought.map((b) => ({ goodsPaise: b.unitPaise * b.quantity, mode: deliveryModeOf(b.p), feePaise: b.p.deliveryFeePaise })),
         discountPaise, rules: settings, zone: zoneFor(parseZones(settings.deliveryZones), dto.shipping.pincode), gifts: tiers,
       });
       const shippingPaise = basket.shippingPaise;
@@ -159,7 +186,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           shippingName: dto.shipping.name,
           shippingAddr: dto.shipping as unknown as Prisma.InputJsonValue,
           items: {
-            create: products.map((p) => ({ productId: p.id, quantity: qty.get(p.id)!, pricePaise: unitPrice.get(p.id)!, costPaise: p.costPaise, gstRatePercent: p.gstRatePercent, returnDays: productReturnDays(p, settings.returnWindowDays) })),
+            create: bought.map((b) => ({
+              productId: b.p.id, quantity: b.quantity, pricePaise: b.unitPaise, costPaise: b.option ? b.option.costPaise : b.p.costPaise, gstRatePercent: b.p.gstRatePercent,
+              returnDays: productReturnDays(b.p, settings.returnWindowDays), optionId: b.option?.id ?? null, optionLabel: b.option?.label ?? null,
+            })),
           },
         },
         include: orderInclude,
@@ -279,7 +309,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       if (!order) throw new NotFoundException();
       if (RELEASED.includes(status)) {
         // Units that came back through a return were restocked then.
-        for (const i of order.items) if (i.quantity > i.returnedQty) await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.quantity - i.returnedQty } } });
+        for (const i of order.items) await restock(tx, i, i.quantity - i.returnedQty);
       }
       return tx.order.update({ where: { id }, data: { status, ...(status === "DELIVERED" && { deliveredAt: new Date() }) }, include: orderInclude });
     });
@@ -331,7 +361,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
     await this.prisma.$transaction(async (tx) => {
       const items = await tx.orderItem.findMany({ where: { orderId } });
-      for (const i of items) await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.quantity - i.returnedQty } } });
+      for (const i of items) await restock(tx, i, i.quantity - i.returnedQty);
     });
     void this.notify(orderId, "cancelled", refundIssued);
     return this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude });
@@ -343,7 +373,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       const res = await tx.order.updateMany({ where: { id: orderId, status: "PENDING_PAYMENT" }, data: { status: "CANCELLED" } });
       if (res.count === 0) return;
       const items = await tx.orderItem.findMany({ where: { orderId } });
-      for (const i of items) await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.quantity } } });
+      for (const i of items) await restock(tx, i, i.quantity);
     });
   }
 
@@ -367,7 +397,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         await this.mail.send({
           to: o.user.email,
           ...orderMail(kind, {
-            brand: await this.site.brandName(), name: o.user.name, orderRef: orderRef(o.id), items: o.items.map((i) => ({ name: i.product.name, quantity: i.quantity, pricePaise: i.pricePaise })),
+            brand: await this.site.brandName(), name: o.user.name, orderRef: orderRef(o.id), items: o.items.map((i) => ({ name: itemName(i.product.name, i.optionLabel), quantity: i.quantity, pricePaise: i.pricePaise })),
             subtotalPaise: o.subtotalPaise || o.totalPaise, discountPaise: o.discountPaise, shippingPaise: o.shippingPaise, totalPaise: o.totalPaise,
             couponCode: o.couponCode, paymentMethod: o.paymentMethod, refundIssued, url,
           }),

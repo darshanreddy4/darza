@@ -10,7 +10,7 @@ export function CartSync() {
   const { user } = useAuth();
   const { lines } = useCart();
   const userId = user?.id;
-  const signature = JSON.stringify(lines.map((l) => [l.productId, l.quantity]).sort());
+  const signature = JSON.stringify(lines.map((l) => [l.productId, l.optionId ?? "", l.quantity]).sort());
   const last = useRef<string | null>(null);
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function CartSync() {
     const timer = setTimeout(() => {
       fetch(`${API_URL}/cart/snapshot`, {
         method: "PUT", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })) }),
+        body: JSON.stringify({ items: lines.map((l) => ({ productId: l.productId, optionId: l.optionId, quantity: l.quantity })) }),
       }).catch(() => {});
     }, 1500);
     return () => clearTimeout(timer);

@@ -13,7 +13,7 @@ export interface Quote {
   offers: Offer[];
   // The multi-buy saving is already inside subtotalPaise; lines say what each product costs after it.
   multiBuySavedPaise: number;
-  lines: { productId: string; unitPaise: number; savedPaise: number; returnDays: number; buyMoreFor: { qty: number; percent: number } | null }[];
+  lines: { productId: string; optionId: string | null; unitPaise: number; savedPaise: number; returnDays: number; buyMoreFor: { qty: number; percent: number } | null }[];
   delivery: {
     standardPaise: number; specialPaise: number; hasRegular: boolean; hasSpecial: boolean; zone: string | null; freeAllGapPaise: number;
     // Why delivery costs nothing when it could have: the order reached the free-delivery amount, or the free-everything amount.
@@ -53,7 +53,7 @@ export function useCouponCode(): [string, (code: string) => void] {
 // Asks the server to price the basket so delivery fees, coupons and totals always match what will be charged.
 // The PIN code (once it is known) lets area delivery fees count.
 export function useQuote(lines: CartLine[], couponCode: string, pincode?: string) {
-  const items = useMemo(() => lines.map((l) => ({ productId: l.productId, quantity: l.quantity })), [lines]);
+  const items = useMemo(() => lines.map((l) => ({ productId: l.productId, optionId: l.optionId, quantity: l.quantity })), [lines]);
   const key = JSON.stringify({ items, couponCode, pincode });
   const [state, setState] = useState<{ key: string; quote: Quote | null }>({ key: "", quote: null });
 

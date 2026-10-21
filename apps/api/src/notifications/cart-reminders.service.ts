@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import { MailService } from "../mail/mail.service";
 import { cartReminderMail } from "../mail/cart-mail";
 import { PrismaService } from "../prisma.service";
+import { chooseOption } from "../products/product-options";
+import { itemName } from "../products/stock";
 import { SiteService } from "../site/site.module";
 import { unsubscribeToken } from "./unsubscribe";
 
@@ -13,7 +15,7 @@ const EVERY_MS = Number(process.env.CART_REMINDER_INTERVAL_SECONDS ?? 900) * 100
 // Carts older than this are not worth a nudge.
 const MAX_AGE_MS = 7 * 24 * 60 * MINUTE;
 
-export type CartItems = { productId: string; quantity: number }[];
+export type CartItems = { productId: string; optionId?: string; quantity: number }[];
 
 @Injectable()
 export class CartRemindersService implements OnModuleInit, OnModuleDestroy {
@@ -60,15 +62,23 @@ export class CartRemindersService implements OnModuleInit, OnModuleDestroy {
 
     try {
       if ((await this.prisma.order.count({ where: { userId: s.userId, createdAt: { gt: s.savedAt } } })) > 0) return this.clear(s.userId);
-      const wanted = new Map((s.items as CartItems).map((i) => [i.productId, i.quantity]));
-      const products = await this.prisma.product.findMany({ where: { id: { in: [...wanted.keys()] }, status: "PUBLISHED", productType: "OWN", stock: { gt: 0 } }, select: { id: true, name: true, pricePaise: true } });
-      if (products.length === 0 || !s.user.email) return;
+      const items = s.items as CartItems;
+      const products = await this.prisma.product.findMany({ where: { id: { in: items.map((i) => i.productId) }, status: "PUBLISHED", productType: "OWN", stock: { gt: 0 } }, select: { id: true, name: true, pricePaise: true, options: { select: { id: true, label: true, pricePaise: true, stock: true } } } });
+      const byId = new Map(products.map((p) => [p.id, p]));
+      // Sold-out or removed sizes are left out.
+      const rows = items.flatMap((i) => {
+        const p = byId.get(i.productId);
+        const choice = p ? chooseOption(p.options, i.optionId) : null;
+        if (!p || !choice?.ok || (choice.option && choice.option.stock <= 0)) return [];
+        return [{ name: itemName(p.name, choice.option?.label), quantity: i.quantity, pricePaise: choice.option?.pricePaise ?? p.pricePaise }];
+      });
+      if (rows.length === 0 || !s.user.email) return;
 
       await this.mail.send({
         to: s.user.email,
         ...cartReminderMail({
           brand: await this.site.brandName(), name: s.user.name,
-          items: products.map((p) => ({ name: p.name, quantity: wanted.get(p.id) ?? 1, pricePaise: p.pricePaise })),
+          items: rows,
           cartUrl: `${await this.site.webOrigin()}/cart`,
           unsubscribeUrl: `${await this.site.webOrigin()}/unsubscribe?token=${unsubscribeToken(s.userId)}`,
         }),
@@ -87,13 +97,14 @@ export class CartRemindersService implements OnModuleInit, OnModuleDestroy {
       take: 100,
     });
     const ids = [...new Set(rows.flatMap((r) => (r.items as CartItems).map((i) => i.productId)))];
-    const prices = new Map((await this.prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, pricePaise: true } })).map((p) => [p.id, p.pricePaise]));
+    const prices = new Map((await this.prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, pricePaise: true, options: { select: { id: true, pricePaise: true } } } })).map((p) => [p.id, p]));
+    const unit = (i: CartItems[number]) => { const p = prices.get(i.productId); return (i.optionId && p?.options.find((o) => o.id === i.optionId)?.pricePaise) || p?.pricePaise || 0; };
     return rows.map((r) => {
       const items = r.items as CartItems;
       return {
         userId: r.userId, name: r.user.name, email: r.user.email, phone: r.user.phone,
         itemCount: items.reduce((n, i) => n + i.quantity, 0),
-        valuePaise: items.reduce((n, i) => n + (prices.get(i.productId) ?? 0) * i.quantity, 0),
+        valuePaise: items.reduce((n, i) => n + unit(i) * i.quantity, 0),
         savedAt: r.savedAt, remindedAt: r.remindedAt,
       };
     });

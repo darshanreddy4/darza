@@ -82,6 +82,7 @@ export function ProductCard({ product }: { product: Product }) {
         {product.dealLabel && <p><span className="inline-block rounded bg-red-600 px-2 py-1 text-xs font-bold text-white">{product.dealLabel}</span></p>}
         <div className="mt-auto flex items-end justify-between pt-2">
           <div className="flex flex-wrap items-baseline gap-x-2">
+            {(product.options?.length ?? 0) > 1 && <span className="text-xs text-muted">From</span>}
             <span className="font-display text-xl font-bold"><Money paise={product.pricePaise} /></span>
             {discount > 0 && <span className="text-xs text-muted line-through"><Money paise={product.mrpPaise!} /></span>}
             {discount > 0 && <span className="text-xs font-semibold text-green-800">{discount}% off</span>}

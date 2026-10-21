@@ -13,7 +13,11 @@ export interface AdminProduct {
   showRating: boolean; dealLabel: string | null; deliveryDays: number | null; freeDelivery: boolean; chargeDelivery: boolean; deliveryFeePaise: number | null; showAddToCart: boolean; gstRatePercent: number;
   packSize: string | null; saleTag: "TOP_DISCOUNT" | "LOWEST_PRICE" | null; showSold: boolean; multiBuyQty: number | null; multiBuyPercent: number | null;
   returnDays: number | null; salePricePaise: number | null; saleEndsAt: string | null; variantGroup: string | null; colorName: string | null; warranty: string | null; manufacturerInfo: string | null;
+  // What the customer chooses between ("Colour", "Size") and the versions with their own price and stock; when there are any, pricePaise is the lowest and stock the total.
+  optionNames: string[];
+  options: AdminProductOption[];
 }
+export interface AdminProductOption { id: string; label: string; values: string[]; imageUrl: string | null; pricePaise: number; mrpPaise: number | null; stock: number; costPaise: number | null }
 export interface AdminCategory { id: string; name: string; slug: string; parentId: string | null }
 export interface ClickRow { product?: { name: string; slug: string }; platform: string | null; clicks: number }
 

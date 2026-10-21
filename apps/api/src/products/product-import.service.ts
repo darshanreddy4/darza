@@ -32,6 +32,9 @@ function toDto(p: ProductWithImages): Record<string, unknown> {
     gstRatePercent: p.gstRatePercent, sku: p.sku ?? undefined, stock: p.stock ?? undefined, costPaise: p.costPaise ?? undefined,
     platform: p.platform ?? undefined, affiliateUrl: p.affiliateUrl ?? undefined, affiliateDisclosure: p.affiliateDisclosure ?? undefined,
     images: p.images.map((i) => ({ url: i.url, alt: i.alt ?? undefined })), videoUrls: p.videoUrls, highlights: p.highlights,
+    // Kept as they are, so a product with options keeps the price and stock worked out from them.
+    options: p.options.map((o) => ({ id: o.id, label: o.label, values: o.values, imageUrl: o.imageUrl ?? undefined, pricePaise: o.pricePaise, mrpPaise: o.mrpPaise ?? undefined, stock: o.stock, costPaise: o.costPaise ?? undefined })),
+    optionNames: p.optionNames,
   };
 }
 

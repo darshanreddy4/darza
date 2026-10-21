@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCart } from "@/lib/cart";
+import { useCart, cartKey } from "@/lib/cart";
 import { useBrand } from "@/components/BrandProvider";
 import { imgSized } from "@/lib/api";
 import { Money } from "@/lib/currency";
@@ -49,10 +49,10 @@ export default function CartPage() {
       <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
         <ul className="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card">
           {lines.map((l) => {
-            const priced = quote?.lines.find((q) => q.productId === l.productId);
+            const priced = quote?.lines.find((q) => q.productId === l.productId && (q.optionId ?? null) === (l.optionId ?? null));
             const unit = priced?.unitPaise ?? l.pricePaise;
             return (
-            <li key={l.productId} className="flex items-center gap-4 p-5">
+            <li key={cartKey(l)} className="flex items-center gap-4 p-5">
               <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-canvas">
                 {l.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -63,18 +63,19 @@ export default function CartPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <Link href={`/products/${l.slug}`} className="line-clamp-2 font-semibold hover:text-brand-700">{l.name}</Link>
+                {l.optionLabel && <p className="mt-0.5 text-sm font-medium text-ink-3">{l.optionText ?? `Size: ${l.optionLabel}`}</p>}
                 <p className="mt-0.5 text-sm text-muted"><Money paise={unit} /> each</p>
                 {priced && priced.savedPaise > 0 && <p className="mt-0.5 text-xs font-semibold text-green-800">Multi-buy: you save <Money paise={priced.savedPaise} /></p>}
                 {priced?.returnDays === 0 && <p className="mt-0.5 text-xs font-medium text-amber-800">No returns on this item</p>}
                 {priced?.buyMoreFor && <p className="mt-0.5 text-xs font-semibold text-green-800">{multiBuyText(priced.buyMoreFor)}</p>}
               </div>
               <div className="flex items-center overflow-hidden rounded-xl border border-line">
-                <button onClick={() => setQuantity(l.productId, l.quantity - 1)} className="px-3 py-2 hover:bg-canvas" aria-label="Decrease quantity">−</button>
+                <button onClick={() => setQuantity(cartKey(l), l.quantity - 1)} className="px-3 py-2 hover:bg-canvas" aria-label="Decrease quantity">−</button>
                 <span className="w-8 text-center text-sm font-semibold" aria-live="polite">{l.quantity}</span>
-                <button onClick={() => setQuantity(l.productId, l.quantity + 1)} className="px-3 py-2 hover:bg-canvas" aria-label="Increase quantity">+</button>
+                <button onClick={() => setQuantity(cartKey(l), l.quantity + 1)} className="px-3 py-2 hover:bg-canvas" aria-label="Increase quantity">+</button>
               </div>
               <p className="w-24 text-right font-display font-bold"><Money paise={unit * l.quantity} /></p>
-              <button onClick={() => remove(l.productId)} aria-label={`Remove ${l.name} from your cart`} title="Remove" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition hover:bg-red-50 hover:text-red-600">
+              <button onClick={() => remove(cartKey(l))} aria-label={`Remove ${l.name}${l.optionLabel ? ` (${l.optionLabel})` : ""} from your cart`} title="Remove" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition hover:bg-red-50 hover:text-red-600">
                 <svg aria-hidden width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
               </button>
             </li>

@@ -194,6 +194,10 @@ model Product {
   affiliateUrl        String?
   affiliateDisclosure String?
 
+  // Sizes or weights of the same product (1 kg, 25 kg), each with its own price and stock. When there are any, pricePaise is the lowest option price and stock the total.
+  // What the customer chooses between, named by the admin ("Size", "Colour", "Wattage"): one or two, matching the values of each option.
+  optionNames  String[]          @default([])
+  options      ProductOption[]
   clicks       AffiliateClick[]
   orderItems   OrderItem[]
   views        ProductView[]
@@ -206,6 +210,25 @@ model Product {
 
   @@index([status, categoryId])
   @@index([status, featured])
+}
+
+model ProductOption {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label      String
+  // One value per option name ("Black", "L"); label is them joined with " / ".
+  values     String[] @default([])
+  // One of the product's own pictures, shown when this option is chosen.
+  imageUrl   String?
+  pricePaise Int
+  mrpPaise   Int?
+  stock      Int      @default(0)
+  costPaise  Int?
+  position   Int      @default(0)
+
+  @@unique([productId, label])
+  @@index([productId, position])
 }
 
 model ProductImage {
@@ -337,6 +360,9 @@ model OrderItem {
   pricePaise     Int
   costPaise      Int?
   gstRatePercent Int     @default(0)
+  // The size or weight bought, kept as text so the order still reads right if the option is later renamed or removed.
+  optionId       String?
+  optionLabel    String?
 
   // Units already returned and refunded.
   returnedQty Int          @default(0)
